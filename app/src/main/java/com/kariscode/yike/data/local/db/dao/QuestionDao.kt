@@ -31,6 +31,29 @@ interface QuestionDao {
     suspend fun findById(questionId: String): QuestionEntity?
 
     /**
+     * 复习页需要只加载当前卡片本轮到期的问题，
+     * 这样才能满足“按卡片组织并按问题逐题推进”的交互约束。
+     */
+    @Query(
+        """
+        SELECT q.* FROM question q
+        JOIN card c ON c.id = q.cardId
+        JOIN deck d ON d.id = c.deckId
+        WHERE q.cardId = :cardId
+          AND d.archived = 0
+          AND c.archived = 0
+          AND q.status = :activeStatus
+          AND q.dueAt <= :nowEpochMillis
+        ORDER BY q.dueAt ASC, q.createdAt ASC
+        """
+    )
+    suspend fun listDueQuestionsByCard(
+        cardId: String,
+        activeStatus: String,
+        nowEpochMillis: Long
+    ): List<QuestionEntity>
+
+    /**
      * due 查询必须排除已归档的卡片与卡组，否则内容管理归档会与复习/提醒口径冲突。
      */
     @Query(
@@ -65,6 +88,20 @@ interface QuestionDao {
     )
     suspend fun getTodayReviewSummary(activeStatus: String, nowEpochMillis: Long): TodayReviewSummaryRow
 
+    /**
+     * 备份导出需要读取完整问题集合，
+     * 以保证调度字段与归档状态能原样进入导出文件。
+     */
+    @Query("SELECT * FROM question ORDER BY createdAt ASC")
+    suspend fun listAll(): List<QuestionEntity>
+
     @Delete
     suspend fun delete(question: QuestionEntity): Int
+
+    /**
+     * 清空问题表是恢复流程的必要步骤，
+     * 否则旧问题可能继续参与 due 查询，破坏恢复后的结果一致性。
+     */
+    @Query("DELETE FROM question")
+    suspend fun clearAll(): Int
 }
