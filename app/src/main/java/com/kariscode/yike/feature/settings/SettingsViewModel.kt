@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.data.reminder.ReminderScheduler
+import com.kariscode.yike.domain.model.AppSettings
 import com.kariscode.yike.domain.repository.AppSettingsRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,6 +50,14 @@ class SettingsViewModel(
     private val reminderScheduler: ReminderScheduler,
     private val appVersionName: String
 ) : ViewModel() {
+    private var latestSettings = AppSettings(
+        dailyReminderEnabled = false,
+        dailyReminderHour = 20,
+        dailyReminderMinute = 0,
+        schemaVersion = 1,
+        backupLastAt = null
+    )
+
     private val _uiState = MutableStateFlow(
         SettingsUiState(
             isLoading = true,
@@ -72,6 +81,7 @@ class SettingsViewModel(
          */
         viewModelScope.launch {
             appSettingsRepository.observeSettings().collect { settings ->
+                latestSettings = settings
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -113,7 +123,12 @@ class SettingsViewModel(
         viewModelScope.launch {
             runCatching {
                 appSettingsRepository.setDailyReminderTime(hour, minute)
-                reminderScheduler.syncReminderFromRepository()
+                reminderScheduler.syncReminder(
+                    currentReminderSettings(
+                        hour = hour,
+                        minute = minute
+                    )
+                )
             }.onSuccess {
                 _uiState.update {
                     it.copy(
@@ -153,7 +168,7 @@ class SettingsViewModel(
         viewModelScope.launch {
             runCatching {
                 appSettingsRepository.setDailyReminderEnabled(enabled)
-                reminderScheduler.syncReminderFromRepository()
+                reminderScheduler.syncReminder(currentReminderSettings(enabled = enabled))
             }.onSuccess {
                 _uiState.update {
                     it.copy(
@@ -175,6 +190,20 @@ class SettingsViewModel(
             }
         }
     }
+
+    /**
+     * 设置页本身已经持有最新提醒状态，因此直接复用当前快照可以减少写入后的二次读盘，
+     * 同时保持调度口径仍由 `ReminderScheduler` 统一收敛。
+     */
+    private fun currentReminderSettings(
+        enabled: Boolean = _uiState.value.dailyReminderEnabled,
+        hour: Int = _uiState.value.reminderHour,
+        minute: Int = _uiState.value.reminderMinute
+    ): AppSettings = latestSettings.copy(
+        dailyReminderEnabled = enabled,
+        dailyReminderHour = hour,
+        dailyReminderMinute = minute
+    )
 
     companion object {
         /**
