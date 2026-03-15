@@ -701,9 +701,9 @@ private fun YikeBottomNavigation(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        tonalElevation = 3.dp,
-        shadowElevation = 6.dp,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        color = Color.Transparent,
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp)
     ) {
@@ -720,7 +720,7 @@ private fun YikeBottomNavigation(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(18.dp),
                     colors = ButtonDefaults.textButtonColors(
-                        containerColor = if (selected) YikeSurfaceTint else Color.Transparent,
+                        containerColor = if (selected) YikeSurfaceTint.copy(alpha = 0.28f) else Color.Transparent,
                         contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 ) {
