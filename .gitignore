@@ -13,9 +13,4 @@
 .externalNativeBuild
 .cxx
 local.properties
-.claude/
-.codex/
-AGENTS.md
-CLAUDE.md
-prompt.md
 openspec/
