@@ -2,9 +2,11 @@ package com.kariscode.yike.data.repository
 
 import com.kariscode.yike.core.dispatchers.AppDispatchers
 import com.kariscode.yike.data.local.db.dao.QuestionDao
+import com.kariscode.yike.data.local.db.dao.TodayReviewSummaryRow
 import com.kariscode.yike.data.local.db.entity.QuestionEntity
 import com.kariscode.yike.data.mapper.RoomMappers
 import com.kariscode.yike.domain.model.Question
+import com.kariscode.yike.domain.model.TodayReviewSummary
 import com.kariscode.yike.domain.repository.QuestionRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -45,6 +47,20 @@ class OfflineQuestionRepository(
     override suspend fun listDueQuestions(nowEpochMillis: Long): List<Question> = withContext(dispatchers.io) {
         questionDao.listDueQuestions(activeStatus = QuestionEntity.STATUS_ACTIVE, nowEpochMillis = nowEpochMillis)
             .map { entity -> RoomMappers.run { entity.toDomain() } }
+    }
+
+    /**
+     * 统计查询委托给数据库聚合实现，以保证卡片/问题去重与过滤规则一致。
+     */
+    override suspend fun getTodayReviewSummary(nowEpochMillis: Long): TodayReviewSummary = withContext(dispatchers.io) {
+        val row: TodayReviewSummaryRow = questionDao.getTodayReviewSummary(
+            activeStatus = QuestionEntity.STATUS_ACTIVE,
+            nowEpochMillis = nowEpochMillis
+        )
+        TodayReviewSummary(
+            dueCardCount = row.dueCardCount,
+            dueQuestionCount = row.dueQuestionCount
+        )
     }
 
     /**

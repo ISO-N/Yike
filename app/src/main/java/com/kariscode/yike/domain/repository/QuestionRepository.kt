@@ -1,6 +1,7 @@
 package com.kariscode.yike.domain.repository
 
 import com.kariscode.yike.domain.model.Question
+import com.kariscode.yike.domain.model.TodayReviewSummary
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -27,6 +28,12 @@ interface QuestionRepository {
      * due 查询集中在仓储接口，能保证首页统计、提醒 Worker 与复习队列使用一致口径。
      */
     suspend fun listDueQuestions(nowEpochMillis: Long): List<Question>
+
+    /**
+     * 首页与提醒需要“卡片数 + 问题数”的概览统计；
+     * 将其作为仓储能力可以保证统计口径一致并避免上层通过拉全量列表再计数。
+     */
+    suspend fun getTodayReviewSummary(nowEpochMillis: Long): TodayReviewSummary
 
     /**
      * 删除问题应同时级联清理复习记录；仓储提供以 ID 删除的语义接口以减少上层对实体的依赖。
