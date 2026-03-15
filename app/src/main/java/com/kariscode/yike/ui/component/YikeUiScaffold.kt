@@ -10,11 +10,17 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -112,6 +118,7 @@ fun YikePrimaryScaffold(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
                     .padding(horizontal = 16.dp)
                     .padding(top = 20.dp)
             ) {
@@ -161,6 +168,7 @@ fun YikeFlowScaffold(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
                     .padding(horizontal = 16.dp)
                     .padding(top = 12.dp)
             ) {
@@ -607,33 +615,39 @@ private fun YikeBottomNavigation(
     currentDestination: YikePrimaryDestination,
     onNavigate: (YikePrimaryDestination) -> Unit
 ) {
-    Surface(
-        tonalElevation = 4.dp,
-        shadowElevation = 6.dp,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        shape = RoundedCornerShape(24.dp)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
+            .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Surface(
+            tonalElevation = 4.dp,
+            shadowElevation = 6.dp,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp)
         ) {
-            YikePrimaryDestination.entries.forEach { destination ->
-                val selected = destination == currentDestination
-                TextButton(
-                    onClick = { onNavigate(destination) },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.textButtonColors(
-                        containerColor = if (selected) YikeSurfaceTint else Color.Transparent,
-                        contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                ) {
-                    Text(text = destination.label, fontWeight = FontWeight.SemiBold)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                YikePrimaryDestination.entries.forEach { destination ->
+                    val selected = destination == currentDestination
+                    TextButton(
+                        onClick = { onNavigate(destination) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = ButtonDefaults.textButtonColors(
+                            containerColor = if (selected) YikeSurfaceTint else Color.Transparent,
+                            contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Text(text = destination.label, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }
