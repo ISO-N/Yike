@@ -4,6 +4,7 @@ import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.os.Build
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -700,12 +701,19 @@ private fun YikeBottomNavigation(
     onNavigate: (YikePrimaryDestination) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val navigationShape = RoundedCornerShape(22.dp)
     Surface(
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         color = Color.Transparent,
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp)
+        modifier = modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f),
+                shape = navigationShape
+            ),
+        shape = navigationShape
     ) {
         Row(
             modifier = Modifier
