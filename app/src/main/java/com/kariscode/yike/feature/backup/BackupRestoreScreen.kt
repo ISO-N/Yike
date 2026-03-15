@@ -4,13 +4,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.kariscode.yike.ui.component.NavigationAction
+import com.kariscode.yike.ui.component.YikeTopAppBar
 
 /**
  * 备份与恢复属于不可逆高风险操作，首版在页面层先固定“风险提示 + 明确确认”的交互承载位置，
@@ -23,9 +23,9 @@ fun BackupRestoreScreen(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("备份与恢复") },
-                navigationIcon = { IconButton(onClick = onBack) { Text("返回") } }
+            YikeTopAppBar(
+                title = "备份与恢复",
+                navigationAction = NavigationAction(label = "返回", onClick = onBack)
             )
         },
         modifier = modifier
@@ -41,4 +41,3 @@ fun BackupRestoreScreen(
         }
     }
 }
-

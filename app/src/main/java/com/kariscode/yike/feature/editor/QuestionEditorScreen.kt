@@ -4,13 +4,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.kariscode.yike.ui.component.NavigationAction
+import com.kariscode.yike.ui.component.YikeTopAppBar
 
 /**
  * 编辑页将来会承载“卡片信息 + 多问题编辑”的复杂表单状态；
@@ -25,9 +25,9 @@ fun QuestionEditorScreen(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("问题编辑") },
-                navigationIcon = { IconButton(onClick = onBack) { Text("返回") } }
+            YikeTopAppBar(
+                title = "问题编辑",
+                navigationAction = NavigationAction(label = "返回", onClick = onBack)
             )
         },
         modifier = modifier
@@ -45,4 +45,3 @@ fun QuestionEditorScreen(
         }
     }
 }
-

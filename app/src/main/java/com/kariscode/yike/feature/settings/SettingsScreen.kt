@@ -5,13 +5,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.kariscode.yike.ui.component.NavigationAction
+import com.kariscode.yike.ui.component.YikeTopAppBar
 
 /**
  * 设置页集中承载提醒与备份入口的原因是这些能力都属于“全局行为”，
@@ -25,9 +25,9 @@ fun SettingsScreen(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("设置") },
-                navigationIcon = { IconButton(onClick = onBack) { Text("返回") } }
+            YikeTopAppBar(
+                title = "设置",
+                navigationAction = NavigationAction(label = "返回", onClick = onBack)
             )
         },
         modifier = modifier
@@ -46,4 +46,3 @@ fun SettingsScreen(
         }
     }
 }
-

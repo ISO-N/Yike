@@ -5,13 +5,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.kariscode.yike.ui.component.NavigationAction
+import com.kariscode.yike.ui.component.YikeTopAppBar
 
 /**
  * 卡组列表页在首版先落导航与页面壳，目的是让后续的数据层接入可以沿着固定路由逐步替换占位状态，
@@ -25,9 +25,9 @@ fun DeckListScreen(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("卡组列表") },
-                navigationIcon = { IconButton(onClick = onBack) { Text("返回") } }
+            YikeTopAppBar(
+                title = "卡组列表",
+                navigationAction = NavigationAction(label = "返回", onClick = onBack)
             )
         },
         modifier = modifier
@@ -46,4 +46,3 @@ fun DeckListScreen(
         }
     }
 }
-

@@ -5,13 +5,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.kariscode.yike.ui.component.NavigationAction
+import com.kariscode.yike.ui.component.YikeTopAppBar
 
 /**
  * 复习队列路由的存在是为了把“选择下一张待复习卡片”的路由逻辑从具体页面中剥离出来，
@@ -26,9 +26,9 @@ fun ReviewQueueScreen(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("复习队列") },
-                navigationIcon = { IconButton(onClick = onBack) { Text("返回") } }
+            YikeTopAppBar(
+                title = "复习队列",
+                navigationAction = NavigationAction(label = "返回", onClick = onBack)
             )
         },
         modifier = modifier
@@ -50,4 +50,3 @@ fun ReviewQueueScreen(
         }
     }
 }
-

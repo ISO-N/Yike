@@ -5,13 +5,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.kariscode.yike.ui.component.NavigationAction
+import com.kariscode.yike.ui.component.YikeTopAppBar
 
 /**
  * 复习页将来会承载“问题 -> 显示答案 -> 评分 -> 下一题”的流程状态机；
@@ -26,9 +26,9 @@ fun ReviewCardScreen(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("复习") },
-                navigationIcon = { IconButton(onClick = onExit) { Text("退出") } }
+            YikeTopAppBar(
+                title = "复习",
+                navigationAction = NavigationAction(label = "退出", onClick = onExit)
             )
         },
         modifier = modifier
@@ -48,4 +48,3 @@ fun ReviewCardScreen(
         }
     }
 }
-
