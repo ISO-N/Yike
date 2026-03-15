@@ -66,6 +66,8 @@ debug
 - 设置页只承载全局能力，不承载内容管理。
 - 已落地实现中，`home`、`deck_list`、`settings` 共享一级导航壳；
   `card_list`、`question_editor`、`review_queue`、`review_card`、`backup_restore` 保持流内导航，不展示底部导航。
+- 一级导航壳采用紧凑页头 + 悬浮底部胶囊导航，避免顶部说明和底部底板过度挤占内容首屏。
+- 一级页内容需要为悬浮导航预留底部安全区，但不再依赖 `Scaffold.bottomBar` 预留固定布局区域。
 
 ---
 
