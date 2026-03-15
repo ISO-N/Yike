@@ -24,7 +24,9 @@ class OfflineDeckRepository(
      * 直接映射 Flow 能让 UI 不触碰 Entity，从而保持 Room 细节不外泄。
      */
     override fun observeActiveDecks(): Flow<List<Deck>> =
-        deckDao.observeActiveDecks().map { list -> list.map { entity -> RoomMappers.run { entity.toDomain() } } }
+        deckDao.observeActiveDecks().map { list ->
+            list.mapModels { entity -> RoomMappers.run { entity.toDomain() } }
+        }
 
     /**
      * 通过数据库聚合流提供统计信息，能让列表页在数据变更时稳定刷新且避免 N+1 查询。
@@ -40,7 +42,9 @@ class OfflineDeckRepository(
      * IO 查询放在 dispatchers.io 上执行，避免在主线程触发磁盘读写导致卡顿。
      */
     override suspend fun findById(deckId: String): Deck? = withContext(dispatchers.io) {
-        deckDao.findById(deckId)?.let { entity -> RoomMappers.run { entity.toDomain() } }
+        deckDao.findById(deckId).mapModel { entity ->
+            RoomMappers.run { entity.toDomain() }
+        }
     }
 
     /**
