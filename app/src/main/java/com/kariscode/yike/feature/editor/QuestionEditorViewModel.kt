@@ -260,15 +260,7 @@ class QuestionEditorViewModel(
                 isLoading = false,
                 title = card.title,
                 description = card.description,
-                questions = questions.map { q ->
-                    QuestionDraft(
-                        id = q.id,
-                        prompt = q.prompt,
-                        answer = q.answer,
-                        isNew = false,
-                        validationMessage = null
-                    )
-                },
+                questions = questions.map { question -> question.toDraft() },
                 hasUnsavedChanges = false,
                 message = null,
                 errorMessage = null
@@ -304,6 +296,17 @@ class QuestionEditorViewModel(
             )
         }
     }
+
+    /**
+     * 从持久化问题回填草稿时统一走单点映射，可避免 reload 路径和后续局部刷新路径各自维护字段拷贝。
+     */
+    private fun Question.toDraft(): QuestionDraft = QuestionDraft(
+        id = id,
+        prompt = prompt,
+        answer = answer,
+        isNew = false,
+        validationMessage = null
+    )
 
     companion object {
         /**
