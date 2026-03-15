@@ -8,8 +8,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kariscode.yike.app.LocalAppContainer
 import com.kariscode.yike.ui.component.NavigationAction
 import com.kariscode.yike.ui.component.YikeTopAppBar
 
@@ -24,13 +29,26 @@ fun ReviewQueueScreen(
     onBackToHome: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val container = LocalAppContainer.current
+    val viewModel = viewModel<ReviewQueueViewModel>(
+        factory = ReviewQueueViewModel.factory(
+            questionRepository = container.questionRepository,
+            timeProvider = container.timeProvider
+        )
+    )
+    val uiState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.effects.collect { effect ->
+            when (effect) {
+                is ReviewQueueEffect.NavigateToCard -> onOpenNextCard(effect.cardId)
+                ReviewQueueEffect.BackToHomeCompleted -> onBackToHome()
+            }
+        }
+    }
+
     Scaffold(
-        topBar = {
-            YikeTopAppBar(
-                title = "复习队列",
-                navigationAction = NavigationAction(label = "返回", onClick = onBack)
-            )
-        },
+        topBar = { YikeTopAppBar(title = "复习队列", navigationAction = NavigationAction(label = "返回", onClick = onBack)) },
         modifier = modifier
     ) { padding ->
         Column(
@@ -40,12 +58,16 @@ fun ReviewQueueScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("复习队列（占位）：后续自动路由到下一张待复习卡片或返回首页完成态。")
-            Button(onClick = { onOpenNextCard("card_demo") }) {
-                Text("进入示例复习卡片")
-            }
-            Button(onClick = onBackToHome) {
-                Text("返回首页")
+            when {
+                uiState.isLoading -> Text("正在选择下一张卡片…")
+                uiState.errorMessage != null -> {
+                    Text(uiState.errorMessage ?: "加载失败")
+                    Button(onClick = viewModel::loadNext) { Text("重试") }
+                }
+                else -> {
+                    Text("正在跳转…")
+                    Button(onClick = onBackToHome) { Text("返回首页") }
+                }
             }
         }
     }
