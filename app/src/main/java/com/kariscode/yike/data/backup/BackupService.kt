@@ -154,11 +154,14 @@ class BackupService(
      * 设置写入单独封装，是为了让恢复成功后的提醒配置和版本信息与备份内容保持一致。
      */
     private suspend fun writeSettingsFromBackup(settings: BackupSettings) {
-        appSettingsRepository.setDailyReminderEnabled(settings.dailyReminderEnabled)
         val (hour, minute) = BackupReminderTimeCodec.parse(settings.dailyReminderTime)
-        appSettingsRepository.setDailyReminderTime(hour, minute)
-        appSettingsRepository.setSchemaVersion(settings.schemaVersion)
-        appSettingsRepository.setBackupLastAt(settings.backupLastAt?.let(BackupJson::parseEpochMillis))
+        persistSettings(
+            dailyReminderEnabled = settings.dailyReminderEnabled,
+            dailyReminderHour = hour,
+            dailyReminderMinute = minute,
+            schemaVersion = settings.schemaVersion,
+            backupLastAt = settings.backupLastAt?.let(BackupJson::parseEpochMillis)
+        )
     }
 
     /**
@@ -166,10 +169,29 @@ class BackupService(
      * 否则即使数据库回滚成功，提醒配置仍可能与当前数据脱节。
      */
     private suspend fun restorePreviousSettings(settings: AppSettings) {
-        appSettingsRepository.setDailyReminderEnabled(settings.dailyReminderEnabled)
-        appSettingsRepository.setDailyReminderTime(settings.dailyReminderHour, settings.dailyReminderMinute)
-        appSettingsRepository.setSchemaVersion(settings.schemaVersion)
-        appSettingsRepository.setBackupLastAt(settings.backupLastAt)
+        persistSettings(
+            dailyReminderEnabled = settings.dailyReminderEnabled,
+            dailyReminderHour = settings.dailyReminderHour,
+            dailyReminderMinute = settings.dailyReminderMinute,
+            schemaVersion = settings.schemaVersion,
+            backupLastAt = settings.backupLastAt
+        )
+    }
+
+    /**
+     * 设置字段统一经由同一写入顺序落库，是为了避免恢复成功路径和补偿回滚路径逐步偏离。
+     */
+    private suspend fun persistSettings(
+        dailyReminderEnabled: Boolean,
+        dailyReminderHour: Int,
+        dailyReminderMinute: Int,
+        schemaVersion: Int,
+        backupLastAt: Long?
+    ) {
+        appSettingsRepository.setDailyReminderEnabled(dailyReminderEnabled)
+        appSettingsRepository.setDailyReminderTime(dailyReminderHour, dailyReminderMinute)
+        appSettingsRepository.setSchemaVersion(schemaVersion)
+        appSettingsRepository.setBackupLastAt(backupLastAt)
     }
 
     /**
