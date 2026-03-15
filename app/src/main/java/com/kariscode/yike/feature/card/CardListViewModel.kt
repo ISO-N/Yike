@@ -156,28 +156,33 @@ class CardListViewModel(
         }
 
         viewModelScope.launch {
-            val now = timeProvider.nowEpochMillis()
-            val existing = editor.cardId?.let { cardRepository.findById(it) }
-            val card = if (existing == null) {
-                Card(
-                    id = "card_${UUID.randomUUID()}",
-                    deckId = deckId,
-                    title = trimmedTitle,
-                    description = editor.description,
-                    archived = false,
-                    sortOrder = 0,
-                    createdAt = now,
-                    updatedAt = now
-                )
-            } else {
-                existing.copy(
-                    title = trimmedTitle,
-                    description = editor.description,
-                    updatedAt = now
-                )
+            runCatching {
+                val now = timeProvider.nowEpochMillis()
+                val existing = editor.cardId?.let { cardRepository.findById(it) }
+                val card = if (existing == null) {
+                    Card(
+                        id = "card_${UUID.randomUUID()}",
+                        deckId = deckId,
+                        title = trimmedTitle,
+                        description = editor.description,
+                        archived = false,
+                        sortOrder = 0,
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                } else {
+                    existing.copy(
+                        title = trimmedTitle,
+                        description = editor.description,
+                        updatedAt = now
+                    )
+                }
+                cardRepository.upsert(card)
+            }.onSuccess {
+                _uiState.update { it.copy(editor = null, message = "卡片已保存", errorMessage = null) }
+            }.onFailure {
+                _uiState.update { it.copy(message = null, errorMessage = "卡片保存失败，请稍后重试") }
             }
-            cardRepository.upsert(card)
-            _uiState.update { it.copy(editor = null, message = "卡片已保存", errorMessage = null) }
         }
     }
 

@@ -31,7 +31,7 @@ class ReminderCheckWorker(
                     )
                 }
             }
-            container.reminderScheduler.syncReminderFromRepository()
+            container.reminderScheduler.syncReminder(settings)
             Result.success()
         }.getOrElse { Result.retry() }
     }

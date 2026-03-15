@@ -177,7 +177,7 @@ class DeckListViewModel(
      * 归档与反归档通过同一入口切换，便于未来把“归档后不进入待复习”作为统一规则拓展。
      */
     fun onToggleArchiveClick(item: DeckSummary) {
-        viewModelScope.launch {
+        executeMutation(errorMessage = "卡组状态更新失败，请稍后重试") {
             val now = timeProvider.nowEpochMillis()
             deckRepository.setArchived(deckId = item.deck.id, archived = !item.deck.archived, updatedAt = now)
         }
@@ -202,7 +202,7 @@ class DeckListViewModel(
      */
     fun onConfirmDelete() {
         val pending = _uiState.value.pendingDelete ?: return
-        viewModelScope.launch {
+        executeMutation(errorMessage = "卡组删除失败，请稍后重试") {
             deckRepository.delete(pending.deck.id)
             _uiState.update { it.copy(pendingDelete = null, message = "卡组已删除", errorMessage = null) }
         }
@@ -228,6 +228,21 @@ class DeckListViewModel(
         _uiState.update { state ->
             val editor = state.editor ?: return@update state
             state.copy(editor = transform(editor))
+        }
+    }
+
+    /**
+     * 列表页的写操作统一走同一层失败反馈，是为了避免归档、删除等入口各自遗漏异常收口。
+     */
+    private fun executeMutation(
+        errorMessage: String,
+        action: suspend () -> Unit
+    ) {
+        viewModelScope.launch {
+            runCatching { action() }
+                .onFailure {
+                    _uiState.update { it.copy(message = null, errorMessage = errorMessage) }
+                }
         }
     }
 
