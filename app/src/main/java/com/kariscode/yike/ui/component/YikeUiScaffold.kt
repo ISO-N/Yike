@@ -106,7 +106,7 @@ fun YikePrimaryScaffold(
     content: @Composable (PaddingValues) -> Unit
 ) {
     val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val contentBottomPadding = navigationBarPadding + 72.dp
+    val contentBottomPadding = navigationBarPadding + 16.dp
     val fabBottomPadding = navigationBarPadding + 76.dp
 
     YikeScreenBackground {
@@ -125,11 +125,9 @@ fun YikePrimaryScaffold(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(bottom = contentBottomPadding)
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    content(PaddingValues(bottom = 0.dp))
+                    content(PaddingValues(bottom = contentBottomPadding))
                 }
             }
 
