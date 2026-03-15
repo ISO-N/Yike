@@ -54,6 +54,21 @@ class BackupValidatorTest {
     }
 
     /**
+     * 非法提醒时间必须在写库前被拒绝，
+     * 否则恢复后调度逻辑会接收到不合法的小时分钟组合。
+     */
+    @Test
+    fun validate_invalidReminderTime_returnsFailure() {
+        val result = validator.validate(
+            createValidDocument().copy(
+                settings = createValidDocument().settings.copy(dailyReminderTime = "25:99")
+            )
+        )
+
+        assertTrue(result.isFailure)
+    }
+
+    /**
      * 用固定的最小合法样本构造文档，能让测试聚焦在校验规则而不是样板数据准备。
      */
     private fun createValidDocument(): BackupDocument = BackupDocument(

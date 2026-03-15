@@ -73,11 +73,7 @@ class BackupValidator {
      * 提醒时间在恢复后会立即参与调度，因此必须在校验阶段就保证格式正确。
      */
     private fun parseReminderTime(value: String) {
-        val parts = value.split(":")
-        require(parts.size == 2) { "备份文件无效或版本不兼容" }
-        val hour = parts[0].toInt()
-        val minute = parts[1].toInt()
-        require(hour in 0..23 && minute in 0..59) { "备份文件无效或版本不兼容" }
+        BackupReminderTimeCodec.parse(value)
     }
 
     /**

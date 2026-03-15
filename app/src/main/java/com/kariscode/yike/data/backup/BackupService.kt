@@ -154,9 +154,9 @@ class BackupService(
      * 设置写入单独封装，是为了让恢复成功后的提醒配置和版本信息与备份内容保持一致。
      */
     private suspend fun writeSettingsFromBackup(settings: BackupSettings) {
-        val parts = settings.dailyReminderTime.split(":")
         appSettingsRepository.setDailyReminderEnabled(settings.dailyReminderEnabled)
-        appSettingsRepository.setDailyReminderTime(parts[0].toInt(), parts[1].toInt())
+        val (hour, minute) = BackupReminderTimeCodec.parse(settings.dailyReminderTime)
+        appSettingsRepository.setDailyReminderTime(hour, minute)
         appSettingsRepository.setSchemaVersion(settings.schemaVersion)
         appSettingsRepository.setBackupLastAt(settings.backupLastAt?.let(BackupJson::parseEpochMillis))
     }
@@ -176,7 +176,10 @@ class BackupService(
      * 统一把设置映射为固定 `HH:mm` 文本，是为了让备份文件结构稳定且便于人工阅读。
      */
     private fun AppSettings.toBackupReminderTime(): String =
-        "%02d:%02d".format(dailyReminderHour, dailyReminderMinute)
+        BackupReminderTimeCodec.format(
+            hour = dailyReminderHour,
+            minute = dailyReminderMinute
+        )
 
     /**
      * Deck 到备份模型的映射收敛到单点后，字段调整时就不必同时追踪导出主流程里的长内联表达式。
