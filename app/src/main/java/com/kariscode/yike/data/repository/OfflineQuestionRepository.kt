@@ -24,13 +24,17 @@ class OfflineQuestionRepository(
      * 观察式查询让编辑页在新增/删除后自然更新，避免草稿状态与数据库脱节。
      */
     override fun observeQuestionsByCard(cardId: String): Flow<List<Question>> =
-        questionDao.observeQuestionsByCard(cardId).map { list -> list.map { entity -> RoomMappers.run { entity.toDomain() } } }
+        questionDao.observeQuestionsByCard(cardId).map { list ->
+            list.mapModels { entity -> RoomMappers.run { entity.toDomain() } }
+        }
 
     /**
      * 单对象查询用于评分提交事务等需要精确定位的场景。
      */
     override suspend fun findById(questionId: String): Question? = withContext(dispatchers.io) {
-        questionDao.findById(questionId)?.let { entity -> RoomMappers.run { entity.toDomain() } }
+        questionDao.findById(questionId).mapModel { entity ->
+            RoomMappers.run { entity.toDomain() }
+        }
     }
 
     /**
