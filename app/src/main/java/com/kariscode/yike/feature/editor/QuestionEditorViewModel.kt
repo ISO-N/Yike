@@ -174,48 +174,12 @@ class QuestionEditorViewModel(
                 cardRepository.upsert(updatedCard)
 
                 val toUpsert = state.questions.map { draft ->
-                    if (draft.isNew) {
-                        Question(
-                            id = "q_${UUID.randomUUID()}",
-                            cardId = cardId,
-                            prompt = draft.prompt.trim(),
-                            answer = draft.answer,
-                            tags = emptyList(),
-                            status = QuestionStatus.ACTIVE,
-                            stageIndex = 0,
-                            dueAt = initialDueAt,
-                            lastReviewedAt = null,
-                            reviewCount = 0,
-                            lapseCount = 0,
-                            createdAt = now,
-                            updatedAt = now
-                        )
-                    } else {
-                        val original = loadedQuestionsById[draft.id]
-                        if (original == null) {
-                            Question(
-                                id = draft.id,
-                                cardId = cardId,
-                                prompt = draft.prompt.trim(),
-                                answer = draft.answer,
-                                tags = emptyList(),
-                                status = QuestionStatus.ACTIVE,
-                                stageIndex = 0,
-                                dueAt = initialDueAt,
-                                lastReviewedAt = null,
-                                reviewCount = 0,
-                                lapseCount = 0,
-                                createdAt = now,
-                                updatedAt = now
-                            )
-                        } else {
-                            original.copy(
-                                prompt = draft.prompt.trim(),
-                                answer = draft.answer,
-                                updatedAt = now
-                            )
-                        }
-                    }
+                    draft.toQuestion(
+                        cardId = cardId,
+                        nowEpochMillis = now,
+                        initialDueAt = initialDueAt,
+                        original = loadedQuestionsById[draft.id]
+                    )
                 }
 
             questionRepository.upsertAll(toUpsert)
@@ -307,6 +271,40 @@ class QuestionEditorViewModel(
         isNew = false,
         validationMessage = null
     )
+
+    /**
+     * 保存时统一由草稿生成领域模型，可把“新增/旧数据缺失/普通编辑”三种分支的默认字段收敛到一处。
+     */
+    private fun QuestionDraft.toQuestion(
+        cardId: String,
+        nowEpochMillis: Long,
+        initialDueAt: Long,
+        original: Question?
+    ): Question {
+        val trimmedPrompt = prompt.trim()
+        if (!isNew && original != null) {
+            return original.copy(
+                prompt = trimmedPrompt,
+                answer = answer,
+                updatedAt = nowEpochMillis
+            )
+        }
+        return Question(
+            id = if (isNew) "q_${UUID.randomUUID()}" else id,
+            cardId = cardId,
+            prompt = trimmedPrompt,
+            answer = answer,
+            tags = emptyList(),
+            status = QuestionStatus.ACTIVE,
+            stageIndex = 0,
+            dueAt = initialDueAt,
+            lastReviewedAt = null,
+            reviewCount = 0,
+            lapseCount = 0,
+            createdAt = original?.createdAt ?: nowEpochMillis,
+            updatedAt = nowEpochMillis
+        )
+    }
 
     companion object {
         /**
