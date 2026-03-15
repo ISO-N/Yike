@@ -58,6 +58,16 @@ class OfflineQuestionRepository(
     }
 
     /**
+     * 队列页只要下一张卡片 id，因此复用数据库聚合结果能减少无意义的问题对象构建与集合分组。
+     */
+    override suspend fun findNextDueCardId(nowEpochMillis: Long): String? = withContext(dispatchers.io) {
+        questionDao.findNextDueCardId(
+            activeStatus = QuestionEntity.STATUS_ACTIVE,
+            nowEpochMillis = nowEpochMillis
+        )
+    }
+
+    /**
      * 统计查询委托给数据库聚合实现，以保证卡片/问题去重与过滤规则一致。
      */
     override suspend fun getTodayReviewSummary(nowEpochMillis: Long): TodayReviewSummary = withContext(dispatchers.io) {

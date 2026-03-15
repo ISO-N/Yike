@@ -35,6 +35,11 @@ interface QuestionRepository {
     suspend fun listDueQuestions(nowEpochMillis: Long): List<Question>
 
     /**
+     * 复习队列只需要下一张卡片的路由目标，直接返回卡片 id 可以避免先拉全量问题再在内存分组。
+     */
+    suspend fun findNextDueCardId(nowEpochMillis: Long): String?
+
+    /**
      * 首页与提醒需要“卡片数 + 问题数”的概览统计；
      * 将其作为仓储能力可以保证统计口径一致并避免上层通过拉全量列表再计数。
      */

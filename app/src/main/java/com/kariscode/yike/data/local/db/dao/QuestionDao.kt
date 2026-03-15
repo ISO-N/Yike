@@ -75,6 +75,26 @@ interface QuestionDao {
     suspend fun listDueQuestions(activeStatus: String, nowEpochMillis: Long): List<QuestionEntity>
 
     /**
+     * 队列页把“下一张卡片”判断下推到数据库，可以避免把全部到期问题加载到内存后再做分组筛选。
+     */
+    @Query(
+        """
+        SELECT c.id
+        FROM question q
+        JOIN card c ON c.id = q.cardId
+        JOIN deck d ON d.id = c.deckId
+        WHERE d.archived = 0
+          AND c.archived = 0
+          AND q.status = :activeStatus
+          AND q.dueAt <= :nowEpochMillis
+        GROUP BY c.id
+        ORDER BY MIN(q.dueAt) ASC, MIN(q.createdAt) ASC
+        LIMIT 1
+        """
+    )
+    suspend fun findNextDueCardId(activeStatus: String, nowEpochMillis: Long): String?
+
+    /**
      * 首页概览统计一次性返回卡片数与问题数，避免上层通过“拉全量 due 列表再 distinct 计数”的低效做法。
      */
     @Query(

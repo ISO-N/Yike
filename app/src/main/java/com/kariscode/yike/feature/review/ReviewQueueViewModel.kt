@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.kariscode.yike.core.time.TimeProvider
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
-import com.kariscode.yike.domain.model.Question
 import com.kariscode.yike.domain.repository.QuestionRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -63,8 +62,7 @@ class ReviewQueueViewModel(
         viewModelScope.launch {
             runCatching {
                 val now = timeProvider.nowEpochMillis()
-                val dueQuestions = questionRepository.listDueQuestions(now)
-                selectNextCardId(dueQuestions)
+                questionRepository.findNextDueCardId(now)
             }.onSuccess { nextCardId ->
                 _uiState.update { it.copy(isLoading = false, errorMessage = null) }
                 if (nextCardId == null) _effects.tryEmit(ReviewQueueEffect.BackToHomeCompleted)
@@ -73,23 +71,6 @@ class ReviewQueueViewModel(
                 _uiState.update { it.copy(isLoading = false, errorMessage = throwable.message ?: "加载失败") }
             }
         }
-    }
-
-    /**
-     * 选择策略首版以“最早 dueAt 的卡片优先”为准，
-     * 这样能让用户优先处理已经超期最久的内容，且实现简单可解释。
-     */
-    private fun selectNextCardId(dueQuestions: List<Question>): String? {
-        if (dueQuestions.isEmpty()) return null
-        var nextCardId: String? = null
-        var earliestDueAt = Long.MAX_VALUE
-        dueQuestions.forEach { question ->
-            if (question.dueAt < earliestDueAt) {
-                earliestDueAt = question.dueAt
-                nextCardId = question.cardId
-            }
-        }
-        return nextCardId
     }
 
     companion object {
