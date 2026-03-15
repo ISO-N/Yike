@@ -1,7 +1,6 @@
 package com.kariscode.yike.data.local.db.dao
 
 import androidx.room.Dao
-import androidx.room.Delete
 import androidx.room.Query
 import androidx.room.Upsert
 import com.kariscode.yike.data.local.db.entity.DeckEntity
@@ -90,11 +89,11 @@ interface DeckDao {
     suspend fun setArchived(deckId: String, archived: Boolean, updatedAt: Long): Int
 
     /**
-     * 物理删除只用于用户明确确认的高风险操作；
-     * 这里保留接口是为了后续在“删除卡组”确认后一次性触发级联清理。
+     * 按 id 直接删除可避免 Repository 先额外读取一次实体，
+     * 同时仍然保留“找不到记录时静默无操作”的数据库语义。
      */
-    @Delete
-    suspend fun delete(deck: DeckEntity): Int
+    @Query("DELETE FROM deck WHERE id = :deckId")
+    suspend fun deleteById(deckId: String): Int
 
     /**
      * 全量覆盖恢复前必须先清空旧数据，

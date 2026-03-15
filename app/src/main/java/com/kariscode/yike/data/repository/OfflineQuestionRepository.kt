@@ -64,11 +64,11 @@ class OfflineQuestionRepository(
     }
 
     /**
-     * 以 ID 删除能让上层不依赖 Entity 类型，同时保持“找不到则无操作”的容错语义。
+     * 以 ID 直接删除能让上层不依赖 Entity 类型，
+     * 也能避免为了同一条删除路径先执行一次多余查询。
      */
     override suspend fun delete(questionId: String) = withContext(dispatchers.io) {
-        val entity = questionDao.findById(questionId) ?: return@withContext
-        questionDao.delete(entity)
+        questionDao.deleteById(questionId)
         Unit
     }
 }

@@ -61,11 +61,11 @@ class OfflineDeckRepository(
         }
 
     /**
-     * 删除前先读取实体是为了让 DAO 维持简单签名，同时保留“对象不存在时静默返回”的语义。
+     * 直接按 id 删除可减少一次无意义读取，
+     * 同时仍保留“记录不存在时静默无操作”的容错语义。
      */
     override suspend fun delete(deckId: String) = withContext(dispatchers.io) {
-        val entity = deckDao.findById(deckId) ?: return@withContext
-        deckDao.delete(entity)
+        deckDao.deleteById(deckId)
         Unit
     }
 

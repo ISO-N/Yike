@@ -1,7 +1,6 @@
 package com.kariscode.yike.data.local.db.dao
 
 import androidx.room.Dao
-import androidx.room.Delete
 import androidx.room.Query
 import androidx.room.Upsert
 import com.kariscode.yike.data.local.db.entity.CardEntity
@@ -83,8 +82,12 @@ interface CardDao {
     @Query("UPDATE card SET archived = :archived, updatedAt = :updatedAt WHERE id = :cardId")
     suspend fun setArchived(cardId: String, archived: Boolean, updatedAt: Long): Int
 
-    @Delete
-    suspend fun delete(card: CardEntity): Int
+    /**
+     * 按 id 删除能减少无意义的预读取，
+     * 并继续让级联约束作为唯一的数据清理入口生效。
+     */
+    @Query("DELETE FROM card WHERE id = :cardId")
+    suspend fun deleteById(cardId: String): Int
 
     /**
      * 清空卡片表是全量覆盖恢复的前置步骤，

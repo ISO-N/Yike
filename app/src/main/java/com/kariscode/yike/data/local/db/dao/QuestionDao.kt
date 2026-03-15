@@ -1,7 +1,6 @@
 package com.kariscode.yike.data.local.db.dao
 
 import androidx.room.Dao
-import androidx.room.Delete
 import androidx.room.Query
 import androidx.room.Upsert
 import com.kariscode.yike.data.local.db.entity.QuestionEntity
@@ -95,8 +94,12 @@ interface QuestionDao {
     @Query("SELECT * FROM question ORDER BY createdAt ASC")
     suspend fun listAll(): List<QuestionEntity>
 
-    @Delete
-    suspend fun delete(question: QuestionEntity): Int
+    /**
+     * 直接按 id 删除可以把“对象不存在时无操作”的判定留给数据库，
+     * 从而避免 Repository 为了删除再做一次额外读取。
+     */
+    @Query("DELETE FROM question WHERE id = :questionId")
+    suspend fun deleteById(questionId: String): Int
 
     /**
      * 清空问题表是恢复流程的必要步骤，

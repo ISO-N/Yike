@@ -62,11 +62,11 @@ class OfflineCardRepository(
         }
 
     /**
-     * 删除依赖级联约束清理下层数据，因此必须通过 DAO 触发而不是手写多表删除。
+     * 删除依赖级联约束清理下层数据，因此直接按 id 触发 DAO 删除就足够，
+     * 不需要为了同一条删除语义先额外读取实体。
      */
     override suspend fun delete(cardId: String) = withContext(dispatchers.io) {
-        val entity = cardDao.findById(cardId) ?: return@withContext
-        cardDao.delete(entity)
+        cardDao.deleteById(cardId)
         Unit
     }
 
