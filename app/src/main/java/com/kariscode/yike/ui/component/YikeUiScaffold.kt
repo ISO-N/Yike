@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kariscode.yike.navigation.YikeDestination
 import com.kariscode.yike.ui.theme.LocalYikeSpacing
@@ -105,8 +106,8 @@ fun YikePrimaryScaffold(
     content: @Composable (PaddingValues) -> Unit
 ) {
     val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val contentBottomPadding = navigationBarPadding + 104.dp
-    val fabBottomPadding = navigationBarPadding + 92.dp
+    val contentBottomPadding = navigationBarPadding + 72.dp
+    val fabBottomPadding = navigationBarPadding + 76.dp
 
     YikeScreenBackground {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -115,14 +116,14 @@ fun YikePrimaryScaffold(
                     .fillMaxSize()
                     .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
                     .padding(horizontal = 16.dp)
-                    .padding(top = 2.dp)
+                    .padding(top = 0.dp)
             ) {
-                YikeHeaderBlock(
+                YikePrimaryHeaderBlock(
                     eyebrow = currentDestination.label,
                     title = title,
                     subtitle = subtitle
                 )
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -138,7 +139,7 @@ fun YikePrimaryScaffold(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(horizontal = 16.dp)
-                    .padding(bottom = navigationBarPadding + 6.dp)
+                    .padding(bottom = navigationBarPadding + 2.dp)
             )
 
             if (floatingActionButton != null) {
@@ -217,6 +218,40 @@ fun YikeHeaderBlock(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+/**
+ * 一级页头改成更轻的两行结构，是为了把“当前所在页面”和“本页意图”交代清楚后，
+ * 立刻把视觉主导权还给下面的内容卡片，而不是继续占掉首屏高度。
+ */
+@Composable
+private fun YikePrimaryHeaderBlock(
+    eyebrow: String,
+    title: String,
+    subtitle: String
+) {
+    val supportingText = when {
+        title.isNotBlank() -> title
+        subtitle.isNotBlank() -> subtitle
+        else -> null
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = eyebrow,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        supportingText?.let { text ->
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -631,16 +666,16 @@ private fun YikeBottomNavigation(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        tonalElevation = 5.dp,
-        shadowElevation = 10.dp,
+        tonalElevation = 3.dp,
+        shadowElevation = 6.dp,
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp)
+        shape = RoundedCornerShape(22.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             YikePrimaryDestination.entries.forEach { destination ->
