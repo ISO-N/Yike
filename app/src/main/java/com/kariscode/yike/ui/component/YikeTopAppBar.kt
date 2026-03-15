@@ -63,3 +63,10 @@ data class NavigationAction(
     val onClick: () -> Unit
 )
 
+/**
+ * 统一返回动作的文案与建模方式，是为了让各页面不用重复拼装相同的导航对象，
+ * 并把“聚焦流页面默认使用文字返回”这个约定固定在一个位置维护。
+ */
+fun backNavigationAction(onClick: () -> Unit): NavigationAction =
+    NavigationAction(label = "返", onClick = onClick)
+

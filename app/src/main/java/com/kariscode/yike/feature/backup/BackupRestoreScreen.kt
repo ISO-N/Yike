@@ -18,7 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kariscode.yike.app.LocalAppContainer
-import com.kariscode.yike.ui.component.NavigationAction
+import com.kariscode.yike.ui.component.backNavigationAction
 import com.kariscode.yike.ui.component.YikeBadge
 import com.kariscode.yike.ui.component.YikeDangerButton
 import com.kariscode.yike.ui.component.YikeFlowScaffold
@@ -67,7 +67,7 @@ fun BackupRestoreScreen(
     YikeFlowScaffold(
         title = "备份与恢复",
         subtitle = "导出完整 JSON，或在确认风险后从本地备份恢复全部数据。",
-        navigationAction = NavigationAction(label = "返", onClick = onBack)
+        navigationAction = backNavigationAction(onBack)
     ) { padding ->
         BackupRestoreContent(
             uiState = uiState,

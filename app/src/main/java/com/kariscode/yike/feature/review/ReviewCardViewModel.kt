@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.kariscode.yike.core.time.TimeProvider
+import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.domain.model.ReviewRating
 import com.kariscode.yike.domain.repository.CardRepository
 import com.kariscode.yike.domain.repository.ReviewRepository
@@ -265,16 +266,13 @@ class ReviewCardViewModel(
             cardRepository: CardRepository,
             reviewRepository: ReviewRepository,
             timeProvider: TimeProvider
-        ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
-            override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                @Suppress("UNCHECKED_CAST")
-                return ReviewCardViewModel(
-                    cardId = cardId,
-                    cardRepository = cardRepository,
-                    reviewRepository = reviewRepository,
-                    timeProvider = timeProvider
-                ) as T
-            }
+        ): ViewModelProvider.Factory = typedViewModelFactory {
+            ReviewCardViewModel(
+                cardId = cardId,
+                cardRepository = cardRepository,
+                reviewRepository = reviewRepository,
+                timeProvider = timeProvider
+            )
         }
     }
 }

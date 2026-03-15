@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.data.backup.BackupService
 import com.kariscode.yike.data.reminder.ReminderScheduler
 import com.kariscode.yike.domain.repository.AppSettingsRepository
@@ -190,15 +191,12 @@ class BackupRestoreViewModel(
             backupService: BackupService,
             appSettingsRepository: AppSettingsRepository,
             reminderScheduler: ReminderScheduler
-        ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
-            override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                @Suppress("UNCHECKED_CAST")
-                return BackupRestoreViewModel(
-                    backupService = backupService,
-                    appSettingsRepository = appSettingsRepository,
-                    reminderScheduler = reminderScheduler
-                ) as T
-            }
+        ): ViewModelProvider.Factory = typedViewModelFactory {
+            BackupRestoreViewModel(
+                backupService = backupService,
+                appSettingsRepository = appSettingsRepository,
+                reminderScheduler = reminderScheduler
+            )
         }
     }
 }

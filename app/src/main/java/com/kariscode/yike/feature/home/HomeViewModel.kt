@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.kariscode.yike.core.time.TimeProvider
+import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.domain.model.DeckSummary
 import com.kariscode.yike.domain.model.TodayReviewSummary
 import com.kariscode.yike.domain.repository.DeckRepository
@@ -93,11 +94,8 @@ class HomeViewModel(
             questionRepository: QuestionRepository,
             deckRepository: DeckRepository,
             timeProvider: TimeProvider
-        ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
-            override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                @Suppress("UNCHECKED_CAST")
-                return HomeViewModel(questionRepository, deckRepository, timeProvider) as T
-            }
+        ): ViewModelProvider.Factory = typedViewModelFactory {
+            HomeViewModel(questionRepository, deckRepository, timeProvider)
         }
     }
 }

@@ -11,7 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kariscode.yike.app.LocalAppContainer
-import com.kariscode.yike.ui.component.NavigationAction
+import com.kariscode.yike.ui.component.backNavigationAction
 import com.kariscode.yike.ui.component.YikeFlowScaffold
 import com.kariscode.yike.ui.component.YikePrimaryButton
 import com.kariscode.yike.ui.component.YikeSecondaryButton
@@ -49,7 +49,7 @@ fun ReviewQueueScreen(
     YikeFlowScaffold(
         title = "准备开始复习",
         subtitle = "我们会先为你选择今天最该处理的那张卡片。",
-        navigationAction = NavigationAction(label = "返", onClick = onBack)
+        navigationAction = backNavigationAction(onBack)
     ) { padding ->
         ReviewQueueContent(
             uiState = uiState,

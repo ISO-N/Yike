@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.data.reminder.ReminderScheduler
 import com.kariscode.yike.domain.repository.AppSettingsRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -183,15 +184,12 @@ class SettingsViewModel(
             appSettingsRepository: AppSettingsRepository,
             reminderScheduler: ReminderScheduler,
             appVersionName: String
-        ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
-            override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                @Suppress("UNCHECKED_CAST")
-                return SettingsViewModel(
-                    appSettingsRepository = appSettingsRepository,
-                    reminderScheduler = reminderScheduler,
-                    appVersionName = appVersionName
-                ) as T
-            }
+        ): ViewModelProvider.Factory = typedViewModelFactory {
+            SettingsViewModel(
+                appSettingsRepository = appSettingsRepository,
+                reminderScheduler = reminderScheduler,
+                appVersionName = appVersionName
+            )
         }
     }
 }

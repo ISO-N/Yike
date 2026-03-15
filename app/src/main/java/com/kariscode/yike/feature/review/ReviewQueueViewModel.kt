@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.kariscode.yike.core.time.TimeProvider
+import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.domain.model.Question
 import com.kariscode.yike.domain.repository.QuestionRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -93,11 +94,8 @@ class ReviewQueueViewModel(
         fun factory(
             questionRepository: QuestionRepository,
             timeProvider: TimeProvider
-        ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
-            override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                @Suppress("UNCHECKED_CAST")
-                return ReviewQueueViewModel(questionRepository, timeProvider) as T
-            }
+        ): ViewModelProvider.Factory = typedViewModelFactory {
+            ReviewQueueViewModel(questionRepository, timeProvider)
         }
     }
 }

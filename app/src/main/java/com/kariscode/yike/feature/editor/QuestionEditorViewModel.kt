@@ -3,6 +3,7 @@ package com.kariscode.yike.feature.editor
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.core.time.TimeProvider
 import com.kariscode.yike.domain.model.Card
 import com.kariscode.yike.domain.model.Question
@@ -307,18 +308,15 @@ class QuestionEditorViewModel(
             questionRepository: QuestionRepository,
             appSettingsRepository: AppSettingsRepository,
             timeProvider: TimeProvider
-        ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
-            override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                @Suppress("UNCHECKED_CAST")
-                return QuestionEditorViewModel(
-                    cardId = cardId,
-                    deckId = deckId,
-                    cardRepository = cardRepository,
-                    questionRepository = questionRepository,
-                    appSettingsRepository = appSettingsRepository,
-                    timeProvider = timeProvider
-                ) as T
-            }
+        ): ViewModelProvider.Factory = typedViewModelFactory {
+            QuestionEditorViewModel(
+                cardId = cardId,
+                deckId = deckId,
+                cardRepository = cardRepository,
+                questionRepository = questionRepository,
+                appSettingsRepository = appSettingsRepository,
+                timeProvider = timeProvider
+            )
         }
     }
 }

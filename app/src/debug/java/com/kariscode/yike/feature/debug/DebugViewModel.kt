@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import com.kariscode.yike.core.dispatchers.AppDispatchers
 import com.kariscode.yike.core.time.TimeProvider
+import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.data.local.db.YikeDatabase
 import com.kariscode.yike.data.local.db.entity.CardEntity
 import com.kariscode.yike.data.local.db.entity.DeckEntity
@@ -251,15 +252,12 @@ class DebugViewModel(
             database: YikeDatabase,
             dispatchers: AppDispatchers,
             timeProvider: TimeProvider
-        ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
-            override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                @Suppress("UNCHECKED_CAST")
-                return DebugViewModel(
-                    database = database,
-                    dispatchers = dispatchers,
-                    timeProvider = timeProvider
-                ) as T
-            }
+        ): ViewModelProvider.Factory = typedViewModelFactory {
+            DebugViewModel(
+                database = database,
+                dispatchers = dispatchers,
+                timeProvider = timeProvider
+            )
         }
     }
 }

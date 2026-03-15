@@ -18,7 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kariscode.yike.app.LocalAppContainer
 import com.kariscode.yike.domain.model.CardSummary
-import com.kariscode.yike.ui.component.NavigationAction
+import com.kariscode.yike.ui.component.backNavigationAction
 import com.kariscode.yike.ui.component.YikeBadge
 import com.kariscode.yike.ui.component.YikeDangerButton
 import com.kariscode.yike.ui.component.YikeFab
@@ -55,7 +55,7 @@ fun CardListScreen(
     YikeFlowScaffold(
         title = uiState.deckName ?: "卡片列表",
         subtitle = "按章节或知识块拆分卡片，能让复习时更容易进入上下文。",
-        navigationAction = NavigationAction(label = "返", onClick = onBack),
+        navigationAction = backNavigationAction(onBack),
         actionText = null,
         onActionClick = null
     ) { padding ->
