@@ -177,13 +177,13 @@ private fun YikeBottomGlassLayer(
 ) {
     Box(
         modifier = modifier
-            .yikeGlassBlur(radius = 22f)
+            .yikeGlassBlur(radius = 28f)
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
                         MaterialTheme.colorScheme.background.copy(alpha = 0f),
-                        MaterialTheme.colorScheme.surface.copy(alpha = 0.36f),
-                        MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
                     )
                 )
             )
@@ -703,8 +703,10 @@ private fun YikeBottomNavigation(
     Surface(
         tonalElevation = 3.dp,
         shadowElevation = 6.dp,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
-        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+        modifier = modifier
+            .fillMaxWidth()
+            .yikeGlassBlur(radius = 26f),
         shape = RoundedCornerShape(22.dp)
     ) {
         Row(
