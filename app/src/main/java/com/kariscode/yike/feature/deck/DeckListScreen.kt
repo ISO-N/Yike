@@ -39,8 +39,6 @@ import com.kariscode.yike.ui.theme.LocalYikeSpacing
  */
 @Composable
 fun DeckListScreen(
-    onOpenHome: () -> Unit,
-    onOpenSettings: () -> Unit,
     onOpenDeck: (deckId: String) -> Unit,
     modifier: Modifier = Modifier
 ) {

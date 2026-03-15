@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kariscode.yike.app.LocalAppContainer
+import com.kariscode.yike.ui.format.formatLocalDateTime
 import com.kariscode.yike.ui.component.backNavigationAction
 import com.kariscode.yike.ui.component.YikeBadge
 import com.kariscode.yike.ui.component.YikeDangerButton
@@ -176,7 +177,4 @@ private fun RestoreConfirmationDialog(
  * 最近备份时间仅用于页面展示，采用本地时间字符串能让用户直观判断数据保护状态。
  */
 private fun formatBackupTime(epochMillis: Long): String =
-    java.time.Instant.ofEpochMilli(epochMillis)
-        .atZone(java.time.ZoneId.systemDefault())
-        .toLocalDateTime()
-        .toString()
+    formatLocalDateTime(epochMillis)

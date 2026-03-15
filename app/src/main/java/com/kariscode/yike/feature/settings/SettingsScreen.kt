@@ -27,6 +27,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kariscode.yike.BuildConfig
 import com.kariscode.yike.app.LocalAppContainer
+import com.kariscode.yike.ui.format.formatLocalDateTime
 import com.kariscode.yike.ui.component.YikeBadge
 import com.kariscode.yike.ui.component.YikeListItemCard
 import com.kariscode.yike.ui.component.YikePrimaryDestination
@@ -40,8 +41,6 @@ import com.kariscode.yike.ui.theme.LocalYikeSpacing
  */
 @Composable
 fun SettingsScreen(
-    onOpenHome: () -> Unit,
-    onOpenDeckList: () -> Unit,
     onOpenBackupRestore: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -263,7 +262,4 @@ private fun formatReminderTime(hour: Int, minute: Int): String = "%02d:%02d".for
  * 最近备份时间只用于设置页展示，因此采用本地时间字符串即可满足理解成本最低的目标。
  */
 private fun formatBackupAt(epochMillis: Long): String =
-    java.time.Instant.ofEpochMilli(epochMillis)
-        .atZone(java.time.ZoneId.systemDefault())
-        .toLocalDateTime()
-        .toString()
+    formatLocalDateTime(epochMillis)

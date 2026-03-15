@@ -63,8 +63,6 @@ fun YikeNavGraph(
 
             composable(route = YikeDestination.DECK_LIST) {
                 DeckListScreen(
-                    onOpenHome = { navController.navigatePrimaryDestination(YikeDestination.HOME) },
-                    onOpenSettings = { navController.navigatePrimaryDestination(YikeDestination.SETTINGS) },
                     onOpenDeck = { deckId -> navController.navigate(YikeDestination.cardList(deckId)) }
                 )
             }
@@ -73,7 +71,7 @@ fun YikeNavGraph(
                 route = YikeDestination.CARD_LIST,
                 arguments = listOf(navArgument("deckId") { type = NavType.StringType })
             ) { entry ->
-                val deckId = entry.arguments?.getString("deckId").orEmpty()
+                val deckId = entry.requireStringArg("deckId")
                 CardListScreen(
                     deckId = deckId,
                     onBack = { navController.popBackStack() },
@@ -94,8 +92,8 @@ fun YikeNavGraph(
                     }
                 )
             ) { entry ->
-                val cardId = entry.arguments?.getString("cardId").orEmpty()
-                val deckId = entry.arguments?.getString("deckId")
+                val cardId = entry.requireStringArg("cardId")
+                val deckId = entry.optionalStringArg("deckId")
                 QuestionEditorScreen(
                     cardId = cardId,
                     deckId = deckId,
@@ -117,7 +115,7 @@ fun YikeNavGraph(
                 route = YikeDestination.REVIEW_CARD,
                 arguments = listOf(navArgument("cardId") { type = NavType.StringType })
             ) { entry ->
-                val cardId = entry.arguments?.getString("cardId").orEmpty()
+                val cardId = entry.requireStringArg("cardId")
                 ReviewCardScreen(
                     cardId = cardId,
                     onExit = { navController.popBackStack(route = YikeDestination.HOME, inclusive = false) },
@@ -127,8 +125,6 @@ fun YikeNavGraph(
 
             composable(route = YikeDestination.SETTINGS) {
                 SettingsScreen(
-                    onOpenHome = { navController.navigatePrimaryDestination(YikeDestination.HOME) },
-                    onOpenDeckList = { navController.navigatePrimaryDestination(YikeDestination.DECK_LIST) },
                     onOpenBackupRestore = { navController.navigate(YikeDestination.BACKUP_RESTORE) }
                 )
             }
