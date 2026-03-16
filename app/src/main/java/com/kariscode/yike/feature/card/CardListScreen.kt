@@ -2,6 +2,8 @@ package com.kariscode.yike.feature.card
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -38,6 +40,8 @@ import com.kariscode.yike.ui.theme.LocalYikeSpacing
 fun CardListScreen(
     deckId: String,
     onBack: () -> Unit,
+    onOpenTodayPreview: () -> Unit,
+    onOpenSearch: (cardId: String?) -> Unit,
     onEditCard: (cardId: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -47,6 +51,7 @@ fun CardListScreen(
             deckId = deckId,
             deckRepository = container.deckRepository,
             cardRepository = container.cardRepository,
+            studyInsightsRepository = container.studyInsightsRepository,
             timeProvider = container.timeProvider
         )
     )
@@ -60,6 +65,8 @@ fun CardListScreen(
         CardListContent(
             uiState = uiState,
             onCreateCard = viewModel::onCreateCardClick,
+            onOpenTodayPreview = onOpenTodayPreview,
+            onOpenSearch = onOpenSearch,
             onOpenEditor = onEditCard,
             onTitleChange = viewModel::onDraftTitleChange,
             onDescriptionChange = viewModel::onDraftDescriptionChange,
@@ -82,6 +89,8 @@ fun CardListScreen(
 private fun CardListContent(
     uiState: CardListUiState,
     onCreateCard: () -> Unit,
+    onOpenTodayPreview: () -> Unit,
+    onOpenSearch: (cardId: String?) -> Unit,
     onOpenEditor: (cardId: String) -> Unit,
     onTitleChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
@@ -99,7 +108,15 @@ private fun CardListContent(
         modifier = modifier.verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(spacing.lg)
     ) {
-        CardOverviewSection(items = uiState.items, onCreateCard = onCreateCard)
+        CardOverviewSection(
+            items = uiState.items,
+            onCreateCard = onCreateCard,
+            onOpenTodayPreview = onOpenTodayPreview,
+            onOpenSearch = { onOpenSearch(null) }
+        )
+        uiState.masterySummary?.let { summary ->
+            CardMasterySection(summary = summary)
+        }
 
         when {
             uiState.isLoading -> {
@@ -134,6 +151,7 @@ private fun CardListContent(
                     CardSummaryCard(
                         item = item,
                         onOpenEditor = { onOpenEditor(item.card.id) },
+                        onOpenSearch = { onOpenSearch(item.card.id) },
                         onEditMeta = { onEditCardMeta(item) },
                         onArchive = { onArchive(item) },
                         onDelete = { onDelete(item) }
@@ -174,7 +192,9 @@ private fun CardListContent(
 @Composable
 private fun CardOverviewSection(
     items: List<CardSummary>,
-    onCreateCard: () -> Unit
+    onCreateCard: () -> Unit,
+    onOpenTodayPreview: () -> Unit,
+    onOpenSearch: () -> Unit
 ) {
     val spacing = LocalYikeSpacing.current
     val totalQuestions = items.sumOf { it.questionCount }
@@ -196,7 +216,43 @@ private fun CardOverviewSection(
                 modifier = Modifier.weight(1f)
             )
         }
+        Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
+            YikePrimaryButton(
+                text = "查看题库",
+                onClick = onOpenSearch,
+                modifier = Modifier.weight(1f)
+            )
+            YikeSecondaryButton(
+                text = "看今日任务",
+                onClick = onOpenTodayPreview,
+                modifier = Modifier.weight(1f)
+            )
+        }
         YikeFab(text = "+ 新卡片", onClick = onCreateCard)
+    }
+}
+
+/**
+ * 熟练度摘要在卡组层先给出分布，是为了让用户在进入具体卡片前就知道薄弱点主要落在哪里。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CardMasterySection(
+    summary: DeckMasterySummary
+) {
+    YikeStateBanner(
+        title = "熟练度分布",
+        description = "自动标签不写回数据库，只根据复习次数、阶段和遗忘次数即时计算。",
+        trailing = {
+            YikeBadge(text = "${summary.totalQuestions} 题")
+        }
+    ) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(LocalYikeSpacing.current.sm)) {
+            YikeBadge(text = "新问题 ${summary.newCount}")
+            YikeBadge(text = "学习中 ${summary.learningCount}")
+            YikeBadge(text = "熟悉 ${summary.familiarCount}")
+            YikeBadge(text = "已掌握 ${summary.masteredCount}")
+        }
     }
 }
 
@@ -207,6 +263,7 @@ private fun CardOverviewSection(
 private fun CardSummaryCard(
     item: CardSummary,
     onOpenEditor: () -> Unit,
+    onOpenSearch: () -> Unit,
     onEditMeta: () -> Unit,
     onArchive: () -> Unit,
     onDelete: () -> Unit
@@ -238,8 +295,8 @@ private fun CardSummaryCard(
                 modifier = Modifier.weight(1f)
             )
             YikeSecondaryButton(
-                text = "编辑卡片",
-                onClick = onEditMeta,
+                text = "检索本卡",
+                onClick = onOpenSearch,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -247,12 +304,9 @@ private fun CardSummaryCard(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(spacing.sm)
         ) {
-            TextButton(onClick = onArchive, modifier = Modifier.weight(1f)) {
-                Text("归档")
-            }
-            TextButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
-                Text("删除")
-            }
+            TextButton(onClick = onEditMeta, modifier = Modifier.weight(1f)) { Text("编辑卡片") }
+            TextButton(onClick = onArchive, modifier = Modifier.weight(1f)) { Text("归档") }
+            TextButton(onClick = onDelete, modifier = Modifier.weight(1f)) { Text("删除") }
         }
     }
 }

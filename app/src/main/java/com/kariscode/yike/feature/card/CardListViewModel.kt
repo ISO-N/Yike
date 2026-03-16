@@ -7,8 +7,13 @@ import com.kariscode.yike.core.time.TimeProvider
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.domain.model.Card
 import com.kariscode.yike.domain.model.CardSummary
+import com.kariscode.yike.domain.model.QuestionMasteryCalculator
+import com.kariscode.yike.domain.model.QuestionMasteryLevel
+import com.kariscode.yike.domain.model.QuestionQueryFilters
+import com.kariscode.yike.domain.model.QuestionStatus
 import com.kariscode.yike.domain.repository.CardRepository
 import com.kariscode.yike.domain.repository.DeckRepository
+import com.kariscode.yike.domain.repository.StudyInsightsRepository
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +34,17 @@ data class CardEditorDraft(
 )
 
 /**
+ * 熟练度摘要集中在卡片页状态里，是为了让卡组层先暴露“整体薄弱分布”，再让用户进入具体卡片。
+ */
+data class DeckMasterySummary(
+    val totalQuestions: Int,
+    val newCount: Int,
+    val learningCount: Int,
+    val familiarCount: Int,
+    val masteredCount: Int
+)
+
+/**
  * 卡片列表状态同时包含 deck 信息与列表聚合结果，原因是页面标题与返回行为都依赖 deckId，
  * 且进程重建时需要只靠参数就能重新加载对应数据。
  */
@@ -37,6 +53,7 @@ data class CardListUiState(
     val deckName: String?,
     val isLoading: Boolean,
     val items: List<CardSummary>,
+    val masterySummary: DeckMasterySummary?,
     val editor: CardEditorDraft?,
     val pendingDelete: CardSummary?,
     val message: String?,
@@ -51,6 +68,7 @@ class CardListViewModel(
     private val deckId: String,
     private val deckRepository: DeckRepository,
     private val cardRepository: CardRepository,
+    private val studyInsightsRepository: StudyInsightsRepository,
     private val timeProvider: TimeProvider
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
@@ -59,6 +77,7 @@ class CardListViewModel(
             deckName = null,
             isLoading = true,
             items = emptyList(),
+            masterySummary = null,
             editor = null,
             pendingDelete = null,
             message = null,
@@ -99,6 +118,7 @@ class CardListViewModel(
                             errorMessage = null
                         )
                     }
+                    refreshMasterySummary()
                 }
         }
     }
@@ -259,6 +279,41 @@ class CardListViewModel(
         }
     }
 
+    /**
+     * 熟练度摘要基于真实问题集合即时计算，是为了遵守“不写回数据库，只按字段推导”的 P0 约束。
+     */
+    private fun refreshMasterySummary() {
+        viewModelScope.launch {
+            runCatching {
+                val questions = studyInsightsRepository.searchQuestionContexts(
+                    filters = QuestionQueryFilters(
+                        deckId = deckId,
+                        status = QuestionStatus.ACTIVE
+                    )
+                )
+                DeckMasterySummary(
+                    totalQuestions = questions.size,
+                    newCount = questions.count { context ->
+                        QuestionMasteryCalculator.snapshot(context.question).level == QuestionMasteryLevel.NEW
+                    },
+                    learningCount = questions.count { context ->
+                        QuestionMasteryCalculator.snapshot(context.question).level == QuestionMasteryLevel.LEARNING
+                    },
+                    familiarCount = questions.count { context ->
+                        QuestionMasteryCalculator.snapshot(context.question).level == QuestionMasteryLevel.FAMILIAR
+                    },
+                    masteredCount = questions.count { context ->
+                        QuestionMasteryCalculator.snapshot(context.question).level == QuestionMasteryLevel.MASTERED
+                    }
+                )
+            }.onSuccess { summary ->
+                _uiState.update { it.copy(masterySummary = summary) }
+            }.onFailure {
+                _uiState.update { it.copy(masterySummary = null) }
+            }
+        }
+    }
+
     companion object {
         /**
          * 工厂将 deckId 与容器依赖注入 ViewModel，避免 ViewModel 直接依赖全局单例。
@@ -267,9 +322,16 @@ class CardListViewModel(
             deckId: String,
             deckRepository: DeckRepository,
             cardRepository: CardRepository,
+            studyInsightsRepository: StudyInsightsRepository,
             timeProvider: TimeProvider
         ): ViewModelProvider.Factory = typedViewModelFactory {
-            CardListViewModel(deckId, deckRepository, cardRepository, timeProvider)
+            CardListViewModel(
+                deckId = deckId,
+                deckRepository = deckRepository,
+                cardRepository = cardRepository,
+                studyInsightsRepository = studyInsightsRepository,
+                timeProvider = timeProvider
+            )
         }
     }
 }
