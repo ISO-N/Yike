@@ -270,12 +270,16 @@ private fun DeckSummaryCard(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(LocalYikeSpacing.current.sm)
         ) {
-            TextButton(onClick = onArchive, modifier = Modifier.weight(1f)) {
-                Text("归档")
-            }
-            TextButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
-                Text("回收站")
-            }
+            YikeSecondaryButton(
+                text = "归档",
+                onClick = onArchive,
+                modifier = Modifier.weight(1f)
+            )
+            YikeSecondaryButton(
+                text = "回收站",
+                onClick = onDelete,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
