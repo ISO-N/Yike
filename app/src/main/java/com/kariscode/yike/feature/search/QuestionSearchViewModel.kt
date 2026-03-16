@@ -2,7 +2,6 @@ package com.kariscode.yike.feature.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewModelScope
 import com.kariscode.yike.core.coroutine.parallel3
 import com.kariscode.yike.core.message.ErrorMessages
 import com.kariscode.yike.core.time.TimeProvider
@@ -128,18 +127,29 @@ class QuestionSearchViewModel(
      * 切换卡组后需要重建卡片候选，是为了避免旧卡组的 cardId 继续残留在当前筛选里。
      */
     fun onDeckSelected(deckId: String?) {
-        viewModelScope.launch {
-            val cards = loadCardsForDeck(deckId)
-            _uiState.update {
-                it.copy(
-                    selectedDeckId = deckId,
-                    selectedCardId = null,
-                    cardOptions = cards,
-                    errorMessage = null
-                )
+        launchResult(
+            action = { loadCardsForDeck(deckId) },
+            onSuccess = { cards ->
+                updateSearchFilters {
+                    it.copy(
+                        selectedDeckId = deckId,
+                        selectedCardId = null,
+                        cardOptions = cards,
+                        errorMessage = null
+                    )
+                }
+            },
+            onFailure = { throwable ->
+                _uiState.update {
+                    it.copy(
+                        selectedDeckId = deckId,
+                        selectedCardId = null,
+                        cardOptions = emptyList(),
+                        errorMessage = throwable.message ?: ErrorMessages.SEARCH_LOAD_FAILED
+                    )
+                }
             }
-            search()
-        }
+        )
     }
 
     /**
