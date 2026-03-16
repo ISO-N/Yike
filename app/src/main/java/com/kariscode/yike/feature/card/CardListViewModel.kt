@@ -291,7 +291,8 @@ class CardListViewModel(
     }
 
     /**
-     * 熟练度摘要基于真实问题集合即时计算，是为了遵守“不写回数据库，只按字段推导”的 P0 约束。
+     * 熟练度摘要基于真实问题集合即时计算，是为了遵守”不写回数据库，只按字段推导”的 P0 约束。
+     * 使用 groupBy 避免对每个问题重复计算熟练度。
      */
     private fun refreshMasterySummary() {
         viewModelScope.launch {
@@ -302,20 +303,16 @@ class CardListViewModel(
                         status = QuestionStatus.ACTIVE
                     )
                 )
+                // 先计算一次熟练度，再用 groupBy 分类，避免重复计算
+                val masteryCounts = questions.groupBy { context ->
+                    QuestionMasteryCalculator.snapshot(context.question).level
+                }
                 DeckMasterySummary(
                     totalQuestions = questions.size,
-                    newCount = questions.count { context ->
-                        QuestionMasteryCalculator.snapshot(context.question).level == QuestionMasteryLevel.NEW
-                    },
-                    learningCount = questions.count { context ->
-                        QuestionMasteryCalculator.snapshot(context.question).level == QuestionMasteryLevel.LEARNING
-                    },
-                    familiarCount = questions.count { context ->
-                        QuestionMasteryCalculator.snapshot(context.question).level == QuestionMasteryLevel.FAMILIAR
-                    },
-                    masteredCount = questions.count { context ->
-                        QuestionMasteryCalculator.snapshot(context.question).level == QuestionMasteryLevel.MASTERED
-                    }
+                    newCount = masteryCounts[QuestionMasteryLevel.NEW]?.size ?: 0,
+                    learningCount = masteryCounts[QuestionMasteryLevel.LEARNING]?.size ?: 0,
+                    familiarCount = masteryCounts[QuestionMasteryLevel.FAMILIAR]?.size ?: 0,
+                    masteredCount = masteryCounts[QuestionMasteryLevel.MASTERED]?.size ?: 0
                 )
             }.onSuccess { summary ->
                 _uiState.update { it.copy(masterySummary = summary) }

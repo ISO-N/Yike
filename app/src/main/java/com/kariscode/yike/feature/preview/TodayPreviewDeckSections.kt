@@ -11,14 +11,12 @@ import androidx.compose.ui.Modifier
 import com.kariscode.yike.domain.model.QuestionMasteryLevel
 import com.kariscode.yike.ui.component.YikeBadge
 import com.kariscode.yike.ui.component.YikeSurfaceCard
+import com.kariscode.yike.ui.format.UiDateTimeFormatters
 import com.kariscode.yike.ui.theme.LocalYikeSpacing
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-
-private val previewDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("M 月 d 日 HH:mm")
 
 /**
  * 卡组列表维持“卡组 -> 卡片 -> 题目预览”的顺序，是为了贴合用户开始前的真实浏览路径。
@@ -105,4 +103,4 @@ private fun TodayPreviewCardSection(
 internal fun formatPreviewDueAt(epochMillis: Long, zoneId: ZoneId = ZoneId.systemDefault()): String =
     Instant.ofEpochMilli(epochMillis)
         .atZone(zoneId)
-        .format(previewDateFormatter)
+        .format(UiDateTimeFormatters.PREVIEW_DATE)

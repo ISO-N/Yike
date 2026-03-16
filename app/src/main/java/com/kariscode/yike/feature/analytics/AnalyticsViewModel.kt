@@ -3,6 +3,7 @@ package com.kariscode.yike.feature.analytics
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kariscode.yike.core.time.TimeConstants
 import com.kariscode.yike.core.time.TimeProvider
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.domain.model.ReviewAnalyticsSnapshot
@@ -17,8 +18,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-private const val DAY_MILLIS: Long = 24L * 60L * 60L * 1000L
 
 /**
  * 时间范围显式建模，是为了让统计页切换口径时保持清晰状态，而不是依赖多个分散布尔值。
@@ -216,8 +215,8 @@ class AnalyticsViewModel(
      * 时间范围换算集中在枚举扩展里，是为了让切换口径时只维护一处时间边界。
      */
     private fun AnalyticsRange.toStartEpochMillis(nowEpochMillis: Long): Long? = when (this) {
-        AnalyticsRange.LAST_7_DAYS -> nowEpochMillis - 7L * DAY_MILLIS
-        AnalyticsRange.LAST_30_DAYS -> nowEpochMillis - 30L * DAY_MILLIS
+        AnalyticsRange.LAST_7_DAYS -> nowEpochMillis - 7L * TimeConstants.DAY_MILLIS
+        AnalyticsRange.LAST_30_DAYS -> nowEpochMillis - 30L * TimeConstants.DAY_MILLIS
         AnalyticsRange.ALL_TIME -> null
     }
 

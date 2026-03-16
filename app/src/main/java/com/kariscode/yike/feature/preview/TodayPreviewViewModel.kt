@@ -3,6 +3,7 @@ package com.kariscode.yike.feature.preview
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kariscode.yike.core.time.TimeConstants
 import com.kariscode.yike.core.time.TimeProvider
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.domain.model.QuestionContext
@@ -18,7 +19,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-private const val SEVEN_DAYS_MILLIS: Long = 7L * 24L * 60L * 60L * 1000L
 private const val DEFAULT_RESPONSE_TIME_MS: Double = 15_000.0
 private const val MIN_RESPONSE_TIME_MS: Double = 10_000.0
 
@@ -115,7 +115,7 @@ class TodayPreviewViewModel(
                     val now = timeProvider.nowEpochMillis()
                     val dueQuestions = async { studyInsightsRepository.listDueQuestionContexts(now) }
                     val analytics = async {
-                        studyInsightsRepository.getReviewAnalytics(startEpochMillis = now - SEVEN_DAYS_MILLIS)
+                        studyInsightsRepository.getReviewAnalytics(startEpochMillis = now - TimeConstants.WEEK_MILLIS)
                     }
                     buildUiState(
                         dueQuestions = dueQuestions.await(),

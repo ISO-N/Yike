@@ -16,12 +16,10 @@ import com.kariscode.yike.ui.component.YikeProgressBar
 import com.kariscode.yike.ui.component.YikeSecondaryButton
 import com.kariscode.yike.ui.component.YikeStateBanner
 import com.kariscode.yike.ui.component.YikeSurfaceCard
+import com.kariscode.yike.ui.format.UiDateTimeFormatters
 import com.kariscode.yike.ui.theme.LocalYikeSpacing
 import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-
-private val searchDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("M 月 d 日 HH:mm")
 
 /**
  * 结果区在空态时给出下一步建议，是为了避免用户面对 0 结果时不知道该放宽哪一类条件。
@@ -128,4 +126,4 @@ private fun buildMetaLine(item: QuestionSearchResultUiModel): String {
 private fun formatSearchDateTime(epochMillis: Long, zoneId: ZoneId = ZoneId.systemDefault()): String =
     Instant.ofEpochMilli(epochMillis)
         .atZone(zoneId)
-        .format(searchDateFormatter)
+        .format(UiDateTimeFormatters.PREVIEW_DATE)
