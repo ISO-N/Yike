@@ -1,6 +1,7 @@
 package com.kariscode.yike.data.repository
 
 import com.kariscode.yike.core.dispatchers.AppDispatchers
+import com.kariscode.yike.data.local.db.dao.ArchivedCardSummaryRow
 import com.kariscode.yike.data.local.db.dao.CardDao
 import com.kariscode.yike.data.local.db.dao.CardSummaryRow
 import com.kariscode.yike.data.local.db.entity.CardEntity
@@ -245,6 +246,34 @@ class OfflineCardRepositoryTest {
         assertEquals(2, summary.dueQuestionCount)
     }
 
+    /**
+     * 回收站摘要需要携带所属卡组名称，
+     * 否则页面恢复卡片时无法向用户交代恢复后的归属上下文。
+     */
+    @Test
+    fun observeArchivedCardSummaries_mapsRowsToDomainModels() = runTest {
+        val row = ArchivedCardSummaryRow(
+            id = "card_2",
+            deckId = "deck_9",
+            deckName = "英语",
+            title = "现在完成时",
+            description = "",
+            archived = true,
+            sortOrder = 0,
+            createdAt = 100L,
+            updatedAt = 200L,
+            questionCount = 3,
+            dueQuestionCount = 1
+        )
+        fakeDao.archivedSummaryRowsFlow.value = listOf(row)
+
+        val summaries = repository.observeArchivedCardSummaries(1000L).first()
+
+        assertEquals(1, summaries.size)
+        assertEquals("deck_9", summaries.first().card.deckId)
+        assertEquals("英语", summaries.first().deckName)
+    }
+
     // ---- helpers ----
 
     private fun createCardEntity(id: String, deckId: String): CardEntity = CardEntity(
@@ -267,6 +296,7 @@ class OfflineCardRepositoryTest {
         val activeCardsFlow = MutableStateFlow<List<CardEntity>>(emptyList())
         var activeCardsList: List<CardEntity> = emptyList()
         val summaryRowsFlow = MutableStateFlow<List<CardSummaryRow>>(emptyList())
+        val archivedSummaryRowsFlow = MutableStateFlow<List<ArchivedCardSummaryRow>>(emptyList())
         val archivedCalls = mutableListOf<ArchivedCall>()
         val deletedIds = mutableListOf<String>()
 
@@ -288,6 +318,11 @@ class OfflineCardRepositoryTest {
             activeStatus: String,
             nowEpochMillis: Long
         ): Flow<List<CardSummaryRow>> = summaryRowsFlow
+
+        override fun observeArchivedCardSummaries(
+            activeStatus: String,
+            nowEpochMillis: Long
+        ): Flow<List<ArchivedCardSummaryRow>> = archivedSummaryRowsFlow
 
         override suspend fun findById(cardId: String): CardEntity? = storedCards[cardId]
 

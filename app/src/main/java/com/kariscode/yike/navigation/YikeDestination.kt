@@ -11,6 +11,7 @@ object YikeDestination {
     const val DECK_LIST = "deck_list"
     const val SETTINGS = "settings"
     const val BACKUP_RESTORE = "backup_restore"
+    const val RECYCLE_BIN = "recycle_bin"
     const val DEBUG = "debug"
     const val TODAY_PREVIEW = "today_preview"
     const val REVIEW_ANALYTICS = "review_analytics"

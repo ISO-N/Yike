@@ -38,11 +38,12 @@ import com.kariscode.yike.ui.format.formatReminderTime
 import com.kariscode.yike.ui.theme.LocalYikeSpacing
 
 /**
- * 设置页属于一级入口，因此必须复用统一导航壳，并在同一页面里承接提醒和备份入口。
+ * 设置页属于一级入口，因此必须复用统一导航壳，并在同一页面里承接提醒、备份和回收站入口。
  */
 @Composable
 fun SettingsScreen(
     onOpenBackupRestore: () -> Unit,
+    onOpenRecycleBin: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -96,6 +97,7 @@ fun SettingsScreen(
                 ).show()
             },
             onOpenBackupRestore = viewModel::onBackupRestoreClick,
+            onOpenRecycleBin = onOpenRecycleBin,
             modifier = modifier,
             contentPadding = padding
         )
@@ -103,7 +105,7 @@ fun SettingsScreen(
 }
 
 /**
- * 设置页主体独立后，可以直接验证提醒状态卡、权限提示和备份入口是否跟真实状态保持一致。
+ * 设置页主体独立后，可以直接验证提醒状态卡、权限提示和低频工具入口是否跟真实状态保持一致。
  */
 @Composable
 private fun SettingsContent(
@@ -112,6 +114,7 @@ private fun SettingsContent(
     onReminderEnabledChange: (Boolean) -> Unit,
     onChangeTime: () -> Unit,
     onOpenBackupRestore: () -> Unit,
+    onOpenRecycleBin: () -> Unit,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues()
 ) {
@@ -141,7 +144,8 @@ private fun SettingsContent(
             hasNotificationPermission = hasNotificationPermission,
             onReminderEnabledChange = onReminderEnabledChange,
             onChangeTime = onChangeTime,
-            onOpenBackupRestore = onOpenBackupRestore
+            onOpenBackupRestore = onOpenBackupRestore,
+            onOpenRecycleBin = onOpenRecycleBin
         )
         Spacer(modifier = Modifier.height(contentPadding.calculateBottomPadding()))
     }
@@ -177,7 +181,7 @@ private fun ReminderStatusSection(
 }
 
 /**
- * 提醒设置区把开关、时间、备份入口和版本信息排成统一列表，是为了保持设置页的低频任务可扫读。
+ * 提醒设置区把开关、时间、低频工具入口和版本信息排成统一列表，是为了保持设置页可扫读。
  */
 @Composable
 private fun ReminderSettingsSection(
@@ -185,7 +189,8 @@ private fun ReminderSettingsSection(
     hasNotificationPermission: Boolean,
     onReminderEnabledChange: (Boolean) -> Unit,
     onChangeTime: () -> Unit,
-    onOpenBackupRestore: () -> Unit
+    onOpenBackupRestore: () -> Unit,
+    onOpenRecycleBin: () -> Unit
 ) {
     YikeListItemCard(
         title = "每日提醒",
@@ -223,6 +228,18 @@ private fun ReminderSettingsSection(
         YikeSecondaryButton(
             text = "进入备份页",
             onClick = onOpenBackupRestore,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    YikeListItemCard(
+        title = "回收站",
+        summary = "管理已归档内容",
+        supporting = "已归档的卡组和卡片会集中放在这里，支持恢复或彻底删除。"
+    ) {
+        YikeSecondaryButton(
+            text = "进入回收站",
+            onClick = onOpenRecycleBin,
             modifier = Modifier.fillMaxWidth()
         )
     }

@@ -26,6 +26,7 @@ import com.kariscode.yike.feature.editor.QuestionEditorScreen
 import com.kariscode.yike.feature.home.HomeScreen
 import com.kariscode.yike.feature.analytics.AnalyticsScreen
 import com.kariscode.yike.feature.preview.TodayPreviewScreen
+import com.kariscode.yike.feature.recyclebin.RecycleBinScreen
 import com.kariscode.yike.feature.review.ReviewCardScreen
 import com.kariscode.yike.feature.review.ReviewQueueScreen
 import com.kariscode.yike.feature.search.QuestionSearchScreen
@@ -141,12 +142,19 @@ fun YikeNavGraph(
 
             composable(route = YikeDestination.SETTINGS) {
                 SettingsScreen(
-                    onOpenBackupRestore = { navController.navigate(YikeDestination.BACKUP_RESTORE) }
+                    onOpenBackupRestore = { navController.navigate(YikeDestination.BACKUP_RESTORE) },
+                    onOpenRecycleBin = { navController.navigate(YikeDestination.RECYCLE_BIN) }
                 )
             }
 
             composable(route = YikeDestination.BACKUP_RESTORE) {
                 BackupRestoreScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(route = YikeDestination.RECYCLE_BIN) {
+                RecycleBinScreen(
                     onBack = { navController.popBackStack() }
                 )
             }
