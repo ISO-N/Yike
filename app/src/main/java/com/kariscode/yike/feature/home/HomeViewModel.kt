@@ -3,7 +3,10 @@ package com.kariscode.yike.feature.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kariscode.yike.core.coroutine.parallel
+import com.kariscode.yike.core.message.ErrorMessages
 import com.kariscode.yike.core.time.TimeProvider
+import com.kariscode.yike.core.viewmodel.launchResult
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.domain.model.DeckSummary
 import com.kariscode.yike.domain.model.TodayReviewSummary
@@ -13,8 +16,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 /**
@@ -59,20 +60,20 @@ class HomeViewModel(
      */
     fun refresh() {
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-        viewModelScope.launch {
-            runCatching {
-                coroutineScope {
-                    val now = timeProvider.nowEpochMillis()
-                    val summary = async { questionRepository.getTodayReviewSummary(now) }
-                    val recentDecks = async {
+        launchResult(
+            action = {
+                val now = timeProvider.nowEpochMillis()
+                parallel(
+                    first = { questionRepository.getTodayReviewSummary(now) },
+                    second = {
                         deckRepository.listRecentActiveDeckSummaries(
                             nowEpochMillis = now,
                             limit = 3
                         )
                     }
-                    summary.await() to recentDecks.await()
-                }
-            }.onSuccess { (summary, recentDecks) ->
+                )
+            },
+            onSuccess = { (summary, recentDecks) ->
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -81,17 +82,18 @@ class HomeViewModel(
                         errorMessage = null
                     )
                 }
-            }.onFailure { throwable ->
+            },
+            onFailure = { throwable ->
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         summary = null,
                         recentDecks = emptyList(),
-                        errorMessage = throwable.message ?: "加载失败"
+                        errorMessage = throwable.message ?: ErrorMessages.HOME_LOAD_FAILED
                     )
                 }
             }
-        }
+        )
     }
 
     companion object {

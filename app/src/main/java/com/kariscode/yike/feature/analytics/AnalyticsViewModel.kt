@@ -3,22 +3,22 @@ package com.kariscode.yike.feature.analytics
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kariscode.yike.core.coroutine.parallel
+import com.kariscode.yike.core.message.ErrorMessages
+import com.kariscode.yike.core.time.TimeConstants
 import com.kariscode.yike.core.time.TimeProvider
+import com.kariscode.yike.core.viewmodel.launchResult
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.domain.model.ReviewAnalyticsSnapshot
 import com.kariscode.yike.domain.repository.StudyInsightsRepository
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-private const val DAY_MILLIS: Long = 24L * 60L * 60L * 1000L
 
 /**
  * 时间范围显式建模，是为了让统计页切换口径时保持清晰状态，而不是依赖多个分散布尔值。
@@ -76,6 +76,11 @@ class AnalyticsViewModel(
     private val timeProvider: TimeProvider,
     private val zoneId: ZoneId = ZoneId.systemDefault()
 ) : ViewModel() {
+    /**
+     * 刷新任务单独持有引用，是为了在用户快速切换统计范围时取消旧查询，避免陈旧结果回写。
+     */
+    private var refreshJob: Job? = null
+
     private val _uiState = MutableStateFlow(
         AnalyticsUiState(
             isLoading = true,
@@ -113,29 +118,28 @@ class AnalyticsViewModel(
      */
     fun refresh() {
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-        viewModelScope.launch {
-            runCatching {
-                coroutineScope {
-                    val startEpochMillis = _uiState.value.selectedRange.toStartEpochMillis(timeProvider.nowEpochMillis())
-                    val analytics = async {
-                        studyInsightsRepository.getReviewAnalytics(startEpochMillis = startEpochMillis)
-                    }
-                    val timestamps = async {
-                        studyInsightsRepository.listReviewTimestamps(startEpochMillis = startEpochMillis)
-                    }
-                    buildUiState(analytics.await(), timestamps.await())
-                }
-            }.onSuccess { state ->
+        refreshJob?.cancel()
+        refreshJob = launchResult(
+            action = {
+                val startEpochMillis = _uiState.value.selectedRange.toStartEpochMillis(timeProvider.nowEpochMillis())
+                parallel(
+                    first = { studyInsightsRepository.getReviewAnalytics(startEpochMillis = startEpochMillis) },
+                    second = { studyInsightsRepository.listReviewTimestamps(startEpochMillis = startEpochMillis) }
+                )
+            },
+            onSuccess = { (analytics, timestamps) ->
+                val state = buildUiState(analytics, timestamps)
                 _uiState.value = state
-            }.onFailure { throwable ->
+            },
+            onFailure = { throwable ->
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        errorMessage = throwable.message ?: "统计页加载失败"
+                        errorMessage = throwable.message ?: ErrorMessages.ANALYTICS_LOAD_FAILED
                     )
                 }
             }
-        }
+        )
     }
 
     /**
@@ -216,8 +220,8 @@ class AnalyticsViewModel(
      * 时间范围换算集中在枚举扩展里，是为了让切换口径时只维护一处时间边界。
      */
     private fun AnalyticsRange.toStartEpochMillis(nowEpochMillis: Long): Long? = when (this) {
-        AnalyticsRange.LAST_7_DAYS -> nowEpochMillis - 7L * DAY_MILLIS
-        AnalyticsRange.LAST_30_DAYS -> nowEpochMillis - 30L * DAY_MILLIS
+        AnalyticsRange.LAST_7_DAYS -> nowEpochMillis - 7L * TimeConstants.DAY_MILLIS
+        AnalyticsRange.LAST_30_DAYS -> nowEpochMillis - 30L * TimeConstants.DAY_MILLIS
         AnalyticsRange.ALL_TIME -> null
     }
 

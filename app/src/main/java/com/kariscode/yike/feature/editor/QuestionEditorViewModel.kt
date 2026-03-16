@@ -3,6 +3,11 @@ package com.kariscode.yike.feature.editor
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kariscode.yike.core.coroutine.parallel
+import com.kariscode.yike.core.id.EntityIds
+import com.kariscode.yike.core.message.ErrorMessages
+import com.kariscode.yike.core.message.SuccessMessages
+import com.kariscode.yike.core.viewmodel.launchResult
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.core.time.TimeProvider
 import com.kariscode.yike.domain.model.Card
@@ -12,13 +17,9 @@ import com.kariscode.yike.domain.repository.AppSettingsRepository
 import com.kariscode.yike.domain.repository.CardRepository
 import com.kariscode.yike.domain.repository.QuestionRepository
 import com.kariscode.yike.domain.scheduler.InitialDueAtCalculator
-import java.util.UUID
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -84,7 +85,7 @@ class QuestionEditorViewModel(
      * 新增问题草稿用临时 ID 区分，以便在保存前支持删除、编辑等操作而不依赖数据库主键生成。
      */
     fun onAddQuestionClick() {
-        val tempId = "temp_${UUID.randomUUID()}"
+        val tempId = EntityIds.newTempDraftId()
         updateDirtyState { state ->
             state.copy(
                 questions = state.questions + QuestionDraft(
@@ -135,31 +136,31 @@ class QuestionEditorViewModel(
         val state = _uiState.value
         val trimmedTitle = state.title.trim()
         if (trimmedTitle.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "卡片标题不能为空") }
+            _uiState.update { it.copy(errorMessage = ErrorMessages.TITLE_REQUIRED) }
             return
         }
 
         val withPromptValidation = state.questions.map { draft ->
             val trimmedPrompt = draft.prompt.trim()
-            if (trimmedPrompt.isBlank()) draft.copy(validationMessage = "题面不能为空") else draft
+            if (trimmedPrompt.isBlank()) draft.copy(validationMessage = ErrorMessages.QUESTION_CONTENT_REQUIRED) else draft
         }
         if (withPromptValidation.any { it.validationMessage != null }) {
-            _uiState.update { it.copy(questions = withPromptValidation, errorMessage = "请修正校验错误后再保存") }
+            _uiState.update { it.copy(questions = withPromptValidation, errorMessage = ErrorMessages.VALIDATION_ERROR) }
             return
         }
 
-        viewModelScope.launch {
-            val card = loadedCard
-            if (card == null) {
-                _uiState.update { it.copy(errorMessage = "卡片不存在或加载失败") }
-                return@launch
-            }
+        val card = loadedCard
+        if (card == null) {
+            _uiState.update { it.copy(errorMessage = ErrorMessages.CARD_NOT_FOUND) }
+            return
+        }
 
-            _uiState.update { it.copy(isSaving = true, errorMessage = null, message = null) }
+        _uiState.update { it.copy(isSaving = true, errorMessage = null, message = null) }
 
-            runCatching {
+        launchResult(
+            action = {
                 val now = timeProvider.nowEpochMillis()
-                val settings = appSettingsRepository.observeSettings().first()
+                val settings = appSettingsRepository.getSettings()
                 val initialDueAt = InitialDueAtCalculator.compute(
                     nowEpochMillis = now,
                     reminderHour = settings.dailyReminderHour,
@@ -182,22 +183,24 @@ class QuestionEditorViewModel(
                     )
                 }
 
-            questionRepository.upsertAll(toUpsert)
-            questionRepository.deleteAll(deletedQuestionIds)
-            deletedQuestionIds.clear()
+                questionRepository.upsertAll(toUpsert)
+                questionRepository.deleteAll(deletedQuestionIds)
+                deletedQuestionIds.clear()
                 reloadFromStorage()
-            }.onSuccess {
-                _uiState.update { it.copy(isSaving = false, hasUnsavedChanges = false, message = "已保存") }
-            }.onFailure {
+            },
+            onSuccess = {
+                _uiState.update { it.copy(isSaving = false, hasUnsavedChanges = false, message = SuccessMessages.SAVED) }
+            },
+            onFailure = {
                 _uiState.update {
                     it.copy(
                         isSaving = false,
                         message = null,
-                        errorMessage = "保存失败，请稍后重试"
+                        errorMessage = ErrorMessages.SAVE_FAILED
                     )
                 }
             }
-        }
+        )
     }
 
     /**
@@ -206,13 +209,12 @@ class QuestionEditorViewModel(
     private suspend fun reloadFromStorage() {
         _uiState.update { it.copy(isLoading = true) }
 
-        val (card, questions) = coroutineScope {
-            val cardDeferred = async { cardRepository.findById(cardId) }
-            val questionsDeferred = async { questionRepository.listByCard(cardId) }
-            cardDeferred.await() to questionsDeferred.await()
-        }
+        val (card, questions) = parallel(
+            first = { cardRepository.findById(cardId) },
+            second = { questionRepository.listByCard(cardId) }
+        )
         if (card == null) {
-            _uiState.update { it.copy(isLoading = false, errorMessage = "卡片不存在") }
+            _uiState.update { it.copy(isLoading = false, errorMessage = ErrorMessages.CARD_NOT_FOUND) }
             return
         }
         loadedCard = card
@@ -290,7 +292,7 @@ class QuestionEditorViewModel(
             )
         }
         return Question(
-            id = if (isNew) "q_${UUID.randomUUID()}" else id,
+            id = if (isNew) EntityIds.newQuestionId() else id,
             cardId = cardId,
             prompt = trimmedPrompt,
             answer = answer,

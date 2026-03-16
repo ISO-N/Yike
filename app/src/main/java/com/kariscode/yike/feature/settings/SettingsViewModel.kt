@@ -4,6 +4,8 @@ import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kariscode.yike.core.message.ErrorMessages
+import com.kariscode.yike.core.viewmodel.launchResult
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.data.reminder.ReminderScheduler
 import com.kariscode.yike.domain.model.AppSettings
@@ -139,13 +141,6 @@ class SettingsViewModel(
     }
 
     /**
-     * 临时消息在展示后可主动清除，避免用户返回页面时重复看到旧反馈。
-     */
-    fun onMessageConsumed() {
-        _uiState.update { it.copy(message = null, errorMessage = null) }
-    }
-
-    /**
      * 开关写入与提醒重建封装成一个入口，是为了保证成功与失败反馈都围绕同一条业务路径。
      */
     private fun persistReminderEnabled(enabled: Boolean, showPermissionWarning: Boolean) {
@@ -167,25 +162,25 @@ class SettingsViewModel(
         successMessage: String,
         action: suspend () -> Unit
     ) {
-        viewModelScope.launch {
-            runCatching { action() }
-                .onSuccess {
-                    _uiState.update {
-                        it.copy(
-                            message = successMessage,
-                            errorMessage = null
-                        )
-                    }
+        launchResult(
+            action = action,
+            onSuccess = {
+                _uiState.update {
+                    it.copy(
+                        message = successMessage,
+                        errorMessage = null
+                    )
                 }
-                .onFailure {
-                    _uiState.update {
-                        it.copy(
-                            message = null,
-                            errorMessage = "设置保存失败，请稍后重试"
-                        )
-                    }
+            },
+            onFailure = {
+                _uiState.update {
+                    it.copy(
+                        message = null,
+                        errorMessage = ErrorMessages.SETTINGS_SAVE_FAILED
+                    )
                 }
-        }
+            }
+        )
     }
 
     /**

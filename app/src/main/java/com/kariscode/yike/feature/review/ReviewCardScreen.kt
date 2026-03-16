@@ -6,27 +6,24 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kariscode.yike.app.LocalAppContainer
 import com.kariscode.yike.domain.model.ReviewRating
-import com.kariscode.yike.ui.component.NavigationAction
+import com.kariscode.yike.ui.component.CollectFlowEffect
 import com.kariscode.yike.ui.component.YikeBadge
-import com.kariscode.yike.ui.component.YikeDangerButton
+import com.kariscode.yike.ui.component.YikeDangerConfirmationDialog
 import com.kariscode.yike.ui.component.YikeFlowScaffold
 import com.kariscode.yike.ui.component.YikeHeaderBlock
 import com.kariscode.yike.ui.component.YikePrimaryButton
 import com.kariscode.yike.ui.component.YikeProgressBar
 import com.kariscode.yike.ui.component.YikeRatingButton
 import com.kariscode.yike.ui.component.YikeRatingPalette
+import com.kariscode.yike.ui.component.YikeScrollableColumn
 import com.kariscode.yike.ui.component.YikeSecondaryButton
 import com.kariscode.yike.ui.component.YikeStateBanner
 import com.kariscode.yike.ui.component.YikeSurfaceCard
@@ -56,12 +53,10 @@ fun ReviewCardScreen(
 
     BackHandler(onBack = viewModel::onExitAttempt)
 
-    LaunchedEffect(Unit) {
-        viewModel.effects.collect { effect ->
-            when (effect) {
-                ReviewCardEffect.NavigateHome -> onExit()
-                ReviewCardEffect.NavigateToQueue -> onNextCard()
-            }
+    CollectFlowEffect(effectFlow = viewModel.effects) { effect ->
+        when (effect) {
+            ReviewCardEffect.NavigateHome -> onExit()
+            ReviewCardEffect.NavigateToQueue -> onNextCard()
         }
     }
 
@@ -85,7 +80,11 @@ fun ReviewCardScreen(
     }
 
     if (uiState.exitConfirmationVisible) {
-        ExitConfirmationDialog(
+        YikeDangerConfirmationDialog(
+            title = "要退出本次复习吗？",
+            description = "当前未评分的问题不会计入完成，稍后需要重新处理。",
+            confirmText = "退出复习",
+            dismissText = "继续复习",
             onDismiss = viewModel::onDismissExitConfirmation,
             onConfirm = viewModel::onConfirmExit
         )
@@ -106,10 +105,7 @@ fun ReviewCardContent(
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalYikeSpacing.current
-    Column(
-        modifier = modifier.verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(spacing.lg)
-    ) {
+    YikeScrollableColumn(modifier = modifier) {
         when {
             uiState.isLoading -> {
                 YikeStateBanner(
@@ -326,27 +322,6 @@ private fun ReviewCompletedSection(
             )
         }
     }
-}
-
-/**
- * 退出确认明确提示“未评分不会计入完成”，是为了帮助用户理解中断复习的真实后果。
- */
-@Composable
-private fun ExitConfirmationDialog(
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("要退出本次复习吗？") },
-        text = { Text("当前未评分的问题不会计入完成，稍后需要重新处理。") },
-        confirmButton = {
-            YikeDangerButton(text = "退出复习", onClick = onConfirm)
-        },
-        dismissButton = {
-            YikeSecondaryButton(text = "继续复习", onClick = onDismiss)
-        }
-    )
 }
 
 /**

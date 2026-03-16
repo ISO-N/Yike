@@ -3,8 +3,13 @@ package com.kariscode.yike.feature.card
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kariscode.yike.core.id.EntityIds
+import com.kariscode.yike.core.message.ErrorMessages
+import com.kariscode.yike.core.message.SuccessMessages
 import com.kariscode.yike.core.time.TimeProvider
+import com.kariscode.yike.core.viewmodel.launchResult
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
+import com.kariscode.yike.feature.common.TextMetadataDraft
 import com.kariscode.yike.domain.model.Card
 import com.kariscode.yike.domain.model.CardSummary
 import com.kariscode.yike.domain.model.QuestionMasteryCalculator
@@ -14,24 +19,14 @@ import com.kariscode.yike.domain.model.QuestionStatus
 import com.kariscode.yike.domain.repository.CardRepository
 import com.kariscode.yike.domain.repository.DeckRepository
 import com.kariscode.yike.domain.repository.StudyInsightsRepository
-import java.util.UUID
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-/**
- * 卡片编辑草稿状态集中在 ViewModel，是为了让“标题必填”等校验规则有稳定落点，
- * 避免在 UI 中散落多个临时状态变量导致保存行为不可预测。
- */
-data class CardEditorDraft(
-    val cardId: String?,
-    val title: String,
-    val description: String,
-    val validationMessage: String? = null
-)
 
 /**
  * 熟练度摘要集中在卡片页状态里，是为了让卡组层先暴露“整体薄弱分布”，再让用户进入具体卡片。
@@ -54,7 +49,7 @@ data class CardListUiState(
     val isLoading: Boolean,
     val items: List<CardSummary>,
     val masterySummary: DeckMasterySummary?,
-    val editor: CardEditorDraft?,
+    val editor: TextMetadataDraft?,
     val pendingDelete: CardSummary?,
     val message: String?,
     val errorMessage: String?
@@ -71,6 +66,22 @@ class CardListViewModel(
     private val studyInsightsRepository: StudyInsightsRepository,
     private val timeProvider: TimeProvider
 ) : ViewModel() {
+    /**
+     * 首屏是否真正完成，需要 deck 元数据和卡片首个发射都到位后再统一关闭 loading，
+     * 这样改成单订阅后仍能保持页面初始化反馈稳定。
+     */
+    private var initialDeckLoaded: Boolean = false
+
+    /**
+     * 列表订阅首次返回前保持 loading，可避免在删除首屏双读后让页面过早进入空列表态。
+     */
+    private var initialCardsLoaded: Boolean = false
+
+    /**
+     * 熟练度摘要用独立 Job 收口，是为了在列表连续发射时只保留最后一次统计，避免无意义叠加查询。
+     */
+    private var masterySummaryJob: Job? = null
+
     private val _uiState = MutableStateFlow(
         CardListUiState(
             deckId = deckId,
@@ -88,46 +99,74 @@ class CardListViewModel(
 
     init {
         /**
-         * deckName 单独加载是为了让页面标题更可读，同时保持数据加载完全基于 deckId 参数。
+         * deck 元数据与卡片列表改成各自独立加载，是为了去掉 `first + collect` 的双读模式，
+         * 同时继续保持列表与标题都能各自实时更新。
          */
-        viewModelScope.launch {
-            val deck = deckRepository.findById(deckId)
-            _uiState.update { it.copy(deckName = deck?.name) }
-        }
+        viewModelScope.launch { loadDeckMetadata() }
+        viewModelScope.launch { observeCardSummaries() }
+    }
 
-        /**
-         * 订阅聚合流以保持列表统计实时更新，避免在新增问题后仍显示旧的 questionCount。
-         */
-        viewModelScope.launch {
-            val now = timeProvider.nowEpochMillis()
-            cardRepository.observeActiveCardSummaries(deckId, now)
-                .catch { throwable ->
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            message = null,
-                            errorMessage = throwable.message ?: "加载失败"
-                        )
-                    }
+    /**
+     * deck 名称单独读取后，列表订阅就不需要为了首屏并行而额外做一次一次性读取。
+     */
+    private suspend fun loadDeckMetadata() {
+        runCatching { deckRepository.findById(deckId) }
+            .onSuccess { deck ->
+                initialDeckLoaded = true
+                _uiState.update {
+                    it.copy(
+                        deckName = deck?.name,
+                        isLoading = shouldKeepLoading()
+                    )
                 }
-                .collect { items ->
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            items = items,
-                            errorMessage = null
-                        )
-                    }
-                    refreshMasterySummary()
+            }
+            .onFailure {
+                initialDeckLoaded = true
+                _uiState.update {
+                    it.copy(
+                        isLoading = shouldKeepLoading(),
+                        message = null,
+                        errorMessage = ErrorMessages.LOAD_FAILED
+                    )
                 }
-        }
+            }
+    }
+
+    /**
+     * 卡片列表始终只保留一个订阅入口，是为了让首屏和后续增删改都走同一条状态更新路径。
+     */
+    private suspend fun observeCardSummaries() {
+        val now = timeProvider.nowEpochMillis()
+        cardRepository.observeActiveCardSummaries(deckId, now)
+            .distinctUntilChanged()
+            .catch { throwable ->
+                initialCardsLoaded = true
+                _uiState.update {
+                    it.copy(
+                        isLoading = shouldKeepLoading(),
+                        message = null,
+                        errorMessage = throwable.message ?: ErrorMessages.LOAD_FAILED
+                    )
+                }
+            }
+            .collect { items ->
+                initialCardsLoaded = true
+                _uiState.update {
+                    it.copy(
+                        isLoading = shouldKeepLoading(),
+                        items = items,
+                        errorMessage = null
+                    )
+                }
+                refreshMasterySummary()
+            }
     }
 
     /**
      * 新建卡片先打开空草稿，便于复用同一套保存校验逻辑。
      */
     fun onCreateCardClick() {
-        openEditor(CardEditorDraft(cardId = null, title = "", description = ""))
+        openEditor(TextMetadataDraft(entityId = null, primaryValue = "", secondaryValue = ""))
     }
 
     /**
@@ -135,10 +174,10 @@ class CardListViewModel(
      */
     fun onEditCardClick(item: CardSummary) {
         openEditor(
-            CardEditorDraft(
-                cardId = item.card.id,
-                title = item.card.title,
-                description = item.card.description
+            TextMetadataDraft(
+                entityId = item.card.id,
+                primaryValue = item.card.title,
+                secondaryValue = item.card.description
             )
         )
     }
@@ -147,14 +186,14 @@ class CardListViewModel(
      * 标题属于必填字段，因此每次输入变更都需要清理上次校验提示以避免误导。
      */
     fun onDraftTitleChange(value: String) {
-        updateEditor { it.copy(title = value, validationMessage = null) }
+        updateEditor { it.updatePrimaryValue(value) }
     }
 
     /**
      * 描述不参与必填校验，但仍需进入草稿以确保保存读取到一致状态。
      */
     fun onDraftDescriptionChange(value: String) {
-        updateEditor { it.copy(description = value, validationMessage = null) }
+        updateEditor { it.updateSecondaryValue(value) }
     }
 
     /**
@@ -169,48 +208,41 @@ class CardListViewModel(
      */
     fun onConfirmSave() {
         val editor = _uiState.value.editor ?: return
-        val trimmedTitle = editor.title.trim()
+        val trimmedTitle = editor.primaryValue.trim()
         if (trimmedTitle.isBlank()) {
-            _uiState.update { it.copy(editor = editor.copy(validationMessage = "标题不能为空")) }
+            _uiState.update { it.copy(editor = editor.withValidationMessage(ErrorMessages.TITLE_REQUIRED)) }
             return
         }
 
-        viewModelScope.launch {
-            runCatching {
+        launchResult(
+            action = {
                 val now = timeProvider.nowEpochMillis()
-                val existing = editor.cardId?.let { cardRepository.findById(it) }
-                val card = if (existing == null) {
-                    Card(
-                        id = "card_${UUID.randomUUID()}",
-                        deckId = deckId,
-                        title = trimmedTitle,
-                        description = editor.description,
-                        archived = false,
-                        sortOrder = 0,
-                        createdAt = now,
-                        updatedAt = now
-                    )
-                } else {
-                    existing.copy(
-                        title = trimmedTitle,
-                        description = editor.description,
-                        updatedAt = now
-                    )
-                }
+                val card = Card(
+                    id = editor.entityId ?: EntityIds.newCardId(),
+                    deckId = deckId,
+                    title = trimmedTitle,
+                    description = editor.secondaryValue,
+                    archived = false,
+                    sortOrder = 0,
+                    createdAt = now,
+                    updatedAt = now
+                )
                 cardRepository.upsert(card)
-            }.onSuccess {
-                _uiState.update { it.copy(editor = null, message = "卡片已保存", errorMessage = null) }
-            }.onFailure {
-                _uiState.update { it.copy(message = null, errorMessage = "卡片保存失败，请稍后重试") }
+            },
+            onSuccess = {
+                _uiState.update { it.copy(editor = null, message = SuccessMessages.SAVED, errorMessage = null) }
+            },
+            onFailure = {
+                _uiState.update { it.copy(message = null, errorMessage = ErrorMessages.SAVE_FAILED) }
             }
-        }
+        )
     }
 
     /**
      * 归档用于默认列表过滤，以降低误删风险并保持内容可恢复。
      */
     fun onArchiveCardClick(item: CardSummary) {
-        executeMutation(errorMessage = "卡片状态更新失败，请稍后重试") {
+        executeMutation(errorMessage = ErrorMessages.UPDATE_FAILED) {
             val now = timeProvider.nowEpochMillis()
             cardRepository.setArchived(cardId = item.card.id, archived = !item.card.archived, updatedAt = now)
         }
@@ -235,16 +267,16 @@ class CardListViewModel(
      */
     fun onConfirmDelete() {
         val pending = _uiState.value.pendingDelete ?: return
-        executeMutation(errorMessage = "卡片删除失败，请稍后重试") {
+        executeMutation(errorMessage = ErrorMessages.DELETE_FAILED) {
             cardRepository.delete(pending.card.id)
-            _uiState.update { it.copy(pendingDelete = null, message = "卡片已删除", errorMessage = null) }
+            _uiState.update { it.copy(pendingDelete = null, message = SuccessMessages.DELETED, errorMessage = null) }
         }
     }
 
     /**
      * 打开编辑器时统一清空旧反馈，是为了让创建和编辑都从同一个干净状态开始。
      */
-    private fun openEditor(editor: CardEditorDraft) {
+    private fun openEditor(editor: TextMetadataDraft) {
         _uiState.update {
             it.copy(
                 editor = editor,
@@ -257,7 +289,7 @@ class CardListViewModel(
     /**
      * 草稿更新收口后，标题与描述的输入路径就不需要各自重复 editor 判空模板。
      */
-    private fun updateEditor(transform: (CardEditorDraft) -> CardEditorDraft) {
+    private fun updateEditor(transform: (TextMetadataDraft) -> TextMetadataDraft) {
         _uiState.update { state ->
             val editor = state.editor ?: return@update state
             state.copy(editor = transform(editor))
@@ -271,48 +303,52 @@ class CardListViewModel(
         errorMessage: String,
         action: suspend () -> Unit
     ) {
-        viewModelScope.launch {
-            runCatching { action() }
-                .onFailure {
-                    _uiState.update { it.copy(message = null, errorMessage = errorMessage) }
-                }
-        }
+        launchResult(
+            action = action,
+            onFailure = {
+                _uiState.update { it.copy(message = null, errorMessage = errorMessage) }
+            }
+        )
     }
 
     /**
-     * 熟练度摘要基于真实问题集合即时计算，是为了遵守“不写回数据库，只按字段推导”的 P0 约束。
+     * 熟练度摘要基于真实问题集合即时计算，是为了遵守”不写回数据库，只按字段推导”的 P0 约束。
+     * 使用 groupBy 避免对每个问题重复计算熟练度。
      */
     private fun refreshMasterySummary() {
-        viewModelScope.launch {
-            runCatching {
+        masterySummaryJob?.cancel()
+        masterySummaryJob = launchResult(
+            action = {
                 val questions = studyInsightsRepository.searchQuestionContexts(
                     filters = QuestionQueryFilters(
                         deckId = deckId,
                         status = QuestionStatus.ACTIVE
                     )
                 )
+                val masteryCounts = questions.groupBy { context ->
+                    QuestionMasteryCalculator.snapshot(context.question).level
+                }
                 DeckMasterySummary(
                     totalQuestions = questions.size,
-                    newCount = questions.count { context ->
-                        QuestionMasteryCalculator.snapshot(context.question).level == QuestionMasteryLevel.NEW
-                    },
-                    learningCount = questions.count { context ->
-                        QuestionMasteryCalculator.snapshot(context.question).level == QuestionMasteryLevel.LEARNING
-                    },
-                    familiarCount = questions.count { context ->
-                        QuestionMasteryCalculator.snapshot(context.question).level == QuestionMasteryLevel.FAMILIAR
-                    },
-                    masteredCount = questions.count { context ->
-                        QuestionMasteryCalculator.snapshot(context.question).level == QuestionMasteryLevel.MASTERED
-                    }
+                    newCount = masteryCounts[QuestionMasteryLevel.NEW]?.size ?: 0,
+                    learningCount = masteryCounts[QuestionMasteryLevel.LEARNING]?.size ?: 0,
+                    familiarCount = masteryCounts[QuestionMasteryLevel.FAMILIAR]?.size ?: 0,
+                    masteredCount = masteryCounts[QuestionMasteryLevel.MASTERED]?.size ?: 0
                 )
-            }.onSuccess { summary ->
+            },
+            onSuccess = { summary ->
                 _uiState.update { it.copy(masterySummary = summary) }
-            }.onFailure {
+            },
+            onFailure = {
                 _uiState.update { it.copy(masterySummary = null) }
             }
-        }
+        )
     }
+
+    /**
+     * 首屏 loading 只依赖两个初始化步骤的完成信号，是为了让后续实时更新不再反复切换加载态。
+     */
+    private fun shouldKeepLoading(): Boolean = !(initialDeckLoaded && initialCardsLoaded)
 
     companion object {
         /**

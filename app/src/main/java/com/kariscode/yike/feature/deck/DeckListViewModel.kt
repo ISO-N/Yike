@@ -3,12 +3,16 @@ package com.kariscode.yike.feature.deck
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kariscode.yike.core.id.EntityIds
+import com.kariscode.yike.core.message.ErrorMessages
+import com.kariscode.yike.core.message.SuccessMessages
 import com.kariscode.yike.core.time.TimeProvider
+import com.kariscode.yike.core.viewmodel.launchResult
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
+import com.kariscode.yike.feature.common.TextMetadataDraft
 import com.kariscode.yike.domain.model.Deck
 import com.kariscode.yike.domain.model.DeckSummary
 import com.kariscode.yike.domain.repository.DeckRepository
-import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,24 +21,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * 将编辑对话框的草稿状态放入 UiState，目的是让 UI 不依赖临时 remember 状态，
- * 从而在后续需要保存/恢复页面状态时有明确的状态承载点。
- */
-data class DeckEditorDraft(
-    val deckId: String?,
-    val name: String,
-    val description: String,
-    val validationMessage: String? = null
-)
-
-/**
  * 列表页状态显式包含“编辑草稿/删除确认”是为了避免在 Composable 里堆叠多个 remember 变量，
  * 这样 ViewModel 可以集中管理交互分支并更容易加测试。
  */
 data class DeckListUiState(
     val isLoading: Boolean,
     val items: List<DeckSummary>,
-    val editor: DeckEditorDraft?,
+    val editor: TextMetadataDraft?,
     val pendingDelete: DeckSummary?,
     val message: String?,
     val errorMessage: String?
@@ -73,7 +66,7 @@ class DeckListViewModel(
                         it.copy(
                             isLoading = false,
                             message = null,
-                            errorMessage = throwable.message ?: "加载失败"
+                            errorMessage = throwable.message ?: ErrorMessages.LOAD_FAILED
                         )
                     }
                 }
@@ -93,7 +86,7 @@ class DeckListViewModel(
      * 新建入口打开空草稿，可让保存逻辑统一复用同一套校验与时间戳策略。
      */
     fun onCreateDeckClick() {
-        openEditor(DeckEditorDraft(deckId = null, name = "", description = ""))
+        openEditor(TextMetadataDraft(entityId = null, primaryValue = "", secondaryValue = ""))
     }
 
     /**
@@ -101,10 +94,10 @@ class DeckListViewModel(
      */
     fun onEditDeckClick(item: DeckSummary) {
         openEditor(
-            DeckEditorDraft(
-                deckId = item.deck.id,
-                name = item.deck.name,
-                description = item.deck.description
+            TextMetadataDraft(
+                entityId = item.deck.id,
+                primaryValue = item.deck.name,
+                secondaryValue = item.deck.description
             )
         )
     }
@@ -113,14 +106,14 @@ class DeckListViewModel(
      * 输入变更统一写入草稿状态，便于后续做就地校验与按钮可用性控制。
      */
     fun onDraftNameChange(value: String) {
-        updateEditor { it.copy(name = value, validationMessage = null) }
+        updateEditor { it.updatePrimaryValue(value) }
     }
 
     /**
      * 描述变更和名称变更同样进入草稿，以确保保存时读取到的是同一份表单状态。
      */
     fun onDraftDescriptionChange(value: String) {
-        updateEditor { it.copy(description = value, validationMessage = null) }
+        updateEditor { it.updateSecondaryValue(value) }
     }
 
     /**
@@ -136,48 +129,42 @@ class DeckListViewModel(
      */
     fun onConfirmSave() {
         val editor = _uiState.value.editor ?: return
-        val trimmedName = editor.name.trim()
+        val trimmedName = editor.primaryValue.trim()
         if (trimmedName.isBlank()) {
-            _uiState.update { it.copy(editor = editor.copy(validationMessage = "名称不能为空")) }
+            _uiState.update { it.copy(editor = editor.withValidationMessage(ErrorMessages.NAME_REQUIRED)) }
             return
         }
 
-        viewModelScope.launch {
-            runCatching {
+        launchResult(
+            action = {
                 val now = timeProvider.nowEpochMillis()
-                val existing = editor.deckId?.let { deckRepository.findById(it) }
-                val deck = if (existing == null) {
-                    Deck(
-                        id = "deck_${UUID.randomUUID()}",
-                        name = trimmedName,
-                        description = editor.description,
-                        archived = false,
-                        sortOrder = 0,
-                        createdAt = now,
-                        updatedAt = now
-                    )
-                } else {
-                    existing.copy(
-                        name = trimmedName,
-                        description = editor.description,
-                        updatedAt = now
-                    )
-                }
-
+                // Room 的 upsert 会自动处理"不存在则插入，存在则更新"的逻辑
+                // 直接构建对象并 upsert，无需先查询
+                val deck = Deck(
+                    id = editor.entityId ?: EntityIds.newDeckId(),
+                    name = trimmedName,
+                    description = editor.secondaryValue,
+                    archived = false,
+                    sortOrder = 0,
+                    createdAt = now,
+                    updatedAt = now
+                )
                 deckRepository.upsert(deck)
-            }.onSuccess {
-                _uiState.update { it.copy(editor = null, message = "卡组已保存", errorMessage = null) }
-            }.onFailure {
-                _uiState.update { it.copy(message = null, errorMessage = "卡组保存失败，请稍后重试") }
+            },
+            onSuccess = {
+                _uiState.update { it.copy(editor = null, message = SuccessMessages.SAVED, errorMessage = null) }
+            },
+            onFailure = {
+                _uiState.update { it.copy(message = null, errorMessage = ErrorMessages.SAVE_FAILED) }
             }
-        }
+        )
     }
 
     /**
      * 归档与反归档通过同一入口切换，便于未来把“归档后不进入待复习”作为统一规则拓展。
      */
     fun onToggleArchiveClick(item: DeckSummary) {
-        executeMutation(errorMessage = "卡组状态更新失败，请稍后重试") {
+        executeMutation(errorMessage = ErrorMessages.UPDATE_FAILED) {
             val now = timeProvider.nowEpochMillis()
             deckRepository.setArchived(deckId = item.deck.id, archived = !item.deck.archived, updatedAt = now)
         }
@@ -202,16 +189,16 @@ class DeckListViewModel(
      */
     fun onConfirmDelete() {
         val pending = _uiState.value.pendingDelete ?: return
-        executeMutation(errorMessage = "卡组删除失败，请稍后重试") {
+        executeMutation(errorMessage = ErrorMessages.DELETE_FAILED) {
             deckRepository.delete(pending.deck.id)
-            _uiState.update { it.copy(pendingDelete = null, message = "卡组已删除", errorMessage = null) }
+            _uiState.update { it.copy(pendingDelete = null, message = SuccessMessages.DELETED, errorMessage = null) }
         }
     }
 
     /**
      * 打开编辑器时统一清空旧反馈，是为了避免新一轮编辑仍残留上一次保存或失败提示。
      */
-    private fun openEditor(editor: DeckEditorDraft) {
+    private fun openEditor(editor: TextMetadataDraft) {
         _uiState.update {
             it.copy(
                 editor = editor,
@@ -224,7 +211,7 @@ class DeckListViewModel(
     /**
      * 草稿更新集中到单点后，标题和描述输入就能共享同一套“无草稿则忽略”的保护逻辑。
      */
-    private fun updateEditor(transform: (DeckEditorDraft) -> DeckEditorDraft) {
+    private fun updateEditor(transform: (TextMetadataDraft) -> TextMetadataDraft) {
         _uiState.update { state ->
             val editor = state.editor ?: return@update state
             state.copy(editor = transform(editor))
@@ -238,12 +225,12 @@ class DeckListViewModel(
         errorMessage: String,
         action: suspend () -> Unit
     ) {
-        viewModelScope.launch {
-            runCatching { action() }
-                .onFailure {
-                    _uiState.update { it.copy(message = null, errorMessage = errorMessage) }
-                }
-        }
+        launchResult(
+            action = action,
+            onFailure = {
+                _uiState.update { it.copy(message = null, errorMessage = errorMessage) }
+            }
+        )
     }
 
     companion object {

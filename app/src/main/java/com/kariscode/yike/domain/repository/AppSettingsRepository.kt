@@ -15,6 +15,12 @@ interface AppSettingsRepository {
     fun observeSettings(): Flow<AppSettings>
 
     /**
+     * 单次读取显式建模为快照接口，是为了把“订阅变化”和“只取当前值”两种意图分开，
+     * 避免调用方为了拿一次配置而重复写 `observeSettings().first()` 模板。
+     */
+    suspend fun getSettings(): AppSettings
+
+    /**
      * 将提醒开关写入封装为仓储方法，便于在未来把“写入后重建提醒任务”作为同一用例的一部分编排，
      * 而不是让 UI 层直接操作 DataStore key。
      */
@@ -27,6 +33,12 @@ interface AppSettingsRepository {
     suspend fun setDailyReminderTime(hour: Int, minute: Int)
 
     /**
+     * 备份恢复与补偿回滚都需要把一整份设置快照原子替换，
+     * 因此提供批量写入口可以避免调用方自行拼装多次写入顺序而逐步漂移。
+     */
+    suspend fun setSettings(settings: AppSettings)
+
+    /**
      * schemaVersion 作为数据代际标识需要集中维护，
      * 否则备份恢复或未来迁移时难以判断当前数据结构处于哪个阶段。
      */
@@ -37,4 +49,5 @@ interface AppSettingsRepository {
      * 允许写入 null 是为了在用户清理数据或恢复失败时显式回退到“未知/未备份”状态。
      */
     suspend fun setBackupLastAt(epochMillis: Long?)
+
 }

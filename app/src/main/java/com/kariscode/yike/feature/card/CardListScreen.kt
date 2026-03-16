@@ -5,10 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -17,18 +13,22 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kariscode.yike.app.LocalAppContainer
+import com.kariscode.yike.core.message.ErrorMessages
 import com.kariscode.yike.domain.model.CardSummary
 import com.kariscode.yike.ui.component.backNavigationAction
 import com.kariscode.yike.ui.component.YikeBadge
-import com.kariscode.yike.ui.component.YikeDangerButton
 import com.kariscode.yike.ui.component.YikeFab
 import com.kariscode.yike.ui.component.YikeFlowScaffold
 import com.kariscode.yike.ui.component.YikeHeroCard
 import com.kariscode.yike.ui.component.YikeListItemCard
 import com.kariscode.yike.ui.component.YikeMetricCard
+import com.kariscode.yike.ui.component.YikeOperationFeedback
 import com.kariscode.yike.ui.component.YikePrimaryButton
+import com.kariscode.yike.ui.component.YikeScrollableColumn
 import com.kariscode.yike.ui.component.YikeSecondaryButton
+import com.kariscode.yike.ui.component.YikeDangerConfirmationDialog
 import com.kariscode.yike.ui.component.YikeStateBanner
+import com.kariscode.yike.ui.component.YikeTextMetadataDialog
 import com.kariscode.yike.ui.theme.LocalYikeSpacing
 
 /**
@@ -101,11 +101,7 @@ private fun CardListContent(
     onConfirmDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val spacing = LocalYikeSpacing.current
-    Column(
-        modifier = modifier.verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(spacing.lg)
-    ) {
+    YikeScrollableColumn(modifier = modifier) {
         CardOverviewSection(
             items = uiState.items,
             onCreateCard = onCreateCard,
@@ -126,7 +122,7 @@ private fun CardListContent(
 
             uiState.errorMessage != null -> {
                 YikeStateBanner(
-                    title = "卡片列表加载失败",
+                    title = ErrorMessages.CARD_LIST_LOAD_FAILED,
                     description = uiState.errorMessage
                 )
             }
@@ -158,26 +154,32 @@ private fun CardListContent(
             }
         }
 
-        uiState.message?.let { message ->
-            YikeStateBanner(
-                title = "操作已完成",
-                description = message
-            )
-        }
+        YikeOperationFeedback(
+            successMessage = uiState.message,
+            errorMessage = null
+        )
     }
 
     uiState.editor?.let { editor ->
-        CardEditorDialog(
-            editor = editor,
-            onTitleChange = onTitleChange,
-            onDescriptionChange = onDescriptionChange,
+        YikeTextMetadataDialog(
+            title = if (editor.entityId == null) "新建卡片" else "编辑卡片",
+            primaryLabel = "标题",
+            primaryValue = editor.primaryValue,
+            onPrimaryValueChange = onTitleChange,
+            secondaryLabel = "说明",
+            secondaryValue = editor.secondaryValue,
+            onSecondaryValueChange = onDescriptionChange,
+            validationMessage = editor.validationMessage,
             onDismiss = onDismissEditor,
             onConfirm = onConfirmSave
         )
     }
 
     uiState.pendingDelete?.let {
-        CardDeleteDialog(
+        YikeDangerConfirmationDialog(
+            title = "确认删除卡片？",
+            description = "删除会级联清理该卡片下的问题与复习记录，且无法恢复。",
+            confirmText = "删除",
             onDismiss = onDismissDelete,
             onConfirm = onConfirmDelete
         )
@@ -313,66 +315,3 @@ private fun CardSummaryCard(
     }
 }
 
-/**
- * 卡片元信息编辑继续用对话框承载，是为了让“快速改标题/说明”不打断问题编辑主路径。
- */
-@Composable
-private fun CardEditorDialog(
-    editor: CardEditorDraft,
-    onTitleChange: (String) -> Unit,
-    onDescriptionChange: (String) -> Unit,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (editor.cardId == null) "新建卡片" else "编辑卡片") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(LocalYikeSpacing.current.md)) {
-                OutlinedTextField(
-                    value = editor.title,
-                    onValueChange = onTitleChange,
-                    label = { Text("标题") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = editor.description,
-                    onValueChange = onDescriptionChange,
-                    label = { Text("说明") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                editor.validationMessage?.let { message ->
-                    Text(text = message)
-                }
-            }
-        },
-        confirmButton = {
-            YikePrimaryButton(text = "保存", onClick = onConfirm)
-        },
-        dismissButton = {
-            YikeSecondaryButton(text = "取消", onClick = onDismiss)
-        }
-    )
-}
-
-/**
- * 删除确认单独封装，是为了让卡片层级的不可逆操作始终带着明确风险说明出现。
- */
-@Composable
-private fun CardDeleteDialog(
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("确认删除卡片？") },
-        text = { Text("删除会级联清理该卡片下的问题与复习记录，且无法恢复。") },
-        confirmButton = {
-            YikeDangerButton(text = "删除", onClick = onConfirm)
-        },
-        dismissButton = {
-            YikeSecondaryButton(text = "取消", onClick = onDismiss)
-        }
-    )
-}

@@ -71,8 +71,8 @@ internal fun QuestionSearchFilterSection(
                 title = "状态",
                 options = listOf(
                     QuestionStatusFilterOption(label = "全部", status = null),
-                    QuestionStatusFilterOption(label = "进行中", status = QuestionStatus.ACTIVE),
-                    QuestionStatusFilterOption(label = "已归档", status = QuestionStatus.ARCHIVED)
+                    QuestionStatusFilterOption(label = QuestionStatus.ACTIVE.displayLabel, status = QuestionStatus.ACTIVE),
+                    QuestionStatusFilterOption(label = QuestionStatus.ARCHIVED.displayLabel, status = QuestionStatus.ARCHIVED)
                 ),
                 selectedStatus = uiState.selectedStatus,
                 onStatusSelected = onStatusSelected

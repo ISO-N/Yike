@@ -11,14 +11,10 @@ import androidx.compose.ui.Modifier
 import com.kariscode.yike.domain.model.QuestionMasteryLevel
 import com.kariscode.yike.ui.component.YikeBadge
 import com.kariscode.yike.ui.component.YikeSurfaceCard
+import com.kariscode.yike.ui.format.formatPreviewDateTime
 import com.kariscode.yike.ui.theme.LocalYikeSpacing
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-
-private val previewDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("M 月 d 日 HH:mm")
 
 /**
  * 卡组列表维持“卡组 -> 卡片 -> 题目预览”的顺序，是为了贴合用户开始前的真实浏览路径。
@@ -84,7 +80,7 @@ private fun TodayPreviewCardSection(
                 YikeBadge(text = question.mastery.level.label)
             }
             Text(
-                text = formatPreviewDueAt(question.dueAt),
+                text = formatPreviewDateTime(question.dueAt),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -99,10 +95,3 @@ private fun TodayPreviewCardSection(
     }
 }
 
-/**
- * due 时间统一格式化为本地月日时分，是为了让预览页和复习页对“什么时候到期”保持同一语义。
- */
-internal fun formatPreviewDueAt(epochMillis: Long, zoneId: ZoneId = ZoneId.systemDefault()): String =
-    Instant.ofEpochMilli(epochMillis)
-        .atZone(zoneId)
-        .format(previewDateFormatter)

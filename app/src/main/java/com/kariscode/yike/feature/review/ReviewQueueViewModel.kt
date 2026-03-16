@@ -2,8 +2,9 @@ package com.kariscode.yike.feature.review
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewModelScope
+import com.kariscode.yike.core.message.ErrorMessages
 import com.kariscode.yike.core.time.TimeProvider
+import com.kariscode.yike.core.viewmodel.launchResult
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.domain.repository.QuestionRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -13,7 +14,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 
 /**
  * 复习队列页面的副作用用于导航路由，
@@ -59,18 +59,20 @@ class ReviewQueueViewModel(
      */
     fun loadNext() {
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-        viewModelScope.launch {
-            runCatching {
+        launchResult(
+            action = {
                 val now = timeProvider.nowEpochMillis()
                 questionRepository.findNextDueCardId(now)
-            }.onSuccess { nextCardId ->
+            },
+            onSuccess = { nextCardId ->
                 _uiState.update { it.copy(isLoading = false, errorMessage = null) }
                 if (nextCardId == null) _effects.tryEmit(ReviewQueueEffect.BackToHomeCompleted)
                 else _effects.tryEmit(ReviewQueueEffect.NavigateToCard(nextCardId))
-            }.onFailure { throwable ->
-                _uiState.update { it.copy(isLoading = false, errorMessage = throwable.message ?: "加载失败") }
+            },
+            onFailure = { throwable ->
+                _uiState.update { it.copy(isLoading = false, errorMessage = throwable.message ?: ErrorMessages.REVIEW_LOAD_FAILED) }
             }
-        }
+        )
     }
 
     companion object {

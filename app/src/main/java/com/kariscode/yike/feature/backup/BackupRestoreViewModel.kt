@@ -4,6 +4,9 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kariscode.yike.core.message.ErrorMessages
+import com.kariscode.yike.core.message.SuccessMessages
+import com.kariscode.yike.core.viewmodel.launchResult
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.data.backup.BackupService
 import com.kariscode.yike.data.reminder.ReminderScheduler
@@ -92,28 +95,30 @@ class BackupRestoreViewModel(
      */
     fun onExportUriSelected(uri: Uri?) {
         if (uri == null) return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isExporting = true, message = null, errorMessage = null) }
-            runCatching {
+        _uiState.update { it.copy(isExporting = true, message = null, errorMessage = null) }
+        launchResult(
+            action = {
                 backupService.exportToUri(uri)
-            }.onSuccess {
+            },
+            onSuccess = {
                 _uiState.update {
                     it.copy(
                         isExporting = false,
-                        message = "备份已导出",
+                        message = SuccessMessages.BACKUP_EXPORTED,
                         errorMessage = null
                     )
                 }
-            }.onFailure {
+            },
+            onFailure = {
                 _uiState.update {
                     it.copy(
                         isExporting = false,
                         message = null,
-                        errorMessage = "导出失败，请重试"
+                        errorMessage = ErrorMessages.BACKUP_EXPORT_FAILED
                     )
                 }
             }
-        }
+        )
     }
 
     /**
@@ -151,36 +156,38 @@ class BackupRestoreViewModel(
      */
     fun onConfirmRestore() {
         val uri = _uiState.value.pendingRestoreUri ?: return
-        viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    isImporting = true,
-                    message = null,
-                    errorMessage = null,
-                    pendingRestoreUri = null
-                )
-            }
-            runCatching {
+        _uiState.update {
+            it.copy(
+                isImporting = true,
+                message = null,
+                errorMessage = null,
+                pendingRestoreUri = null
+            )
+        }
+        launchResult(
+            action = {
                 backupService.restoreFromUri(uri)
                 reminderScheduler.syncReminderFromRepository()
-            }.onSuccess {
+            },
+            onSuccess = {
                 _uiState.update {
                     it.copy(
                         isImporting = false,
-                        message = "恢复成功",
+                        message = SuccessMessages.BACKUP_RESTORED,
                         errorMessage = null
                     )
                 }
-            }.onFailure { throwable ->
+            },
+            onFailure = { throwable ->
                 _uiState.update {
                     it.copy(
                         isImporting = false,
                         message = null,
-                        errorMessage = throwable.message ?: "恢复失败，当前数据未被修改"
+                        errorMessage = throwable.message ?: ErrorMessages.BACKUP_RESTORE_FAILED
                     )
                 }
             }
-        }
+        )
     }
 
     companion object {

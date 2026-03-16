@@ -9,8 +9,6 @@ import com.kariscode.yike.domain.model.Question
 import com.kariscode.yike.domain.model.TodayReviewSummary
 import com.kariscode.yike.domain.repository.QuestionRepository
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.withContext
 
 /**
  * QuestionRepository 需要统一 status/due 条件，才能保证编辑、复习与提醒在同一口径下运行；
@@ -24,15 +22,15 @@ class OfflineQuestionRepository(
      * 观察式查询让编辑页在新增/删除后自然更新，避免草稿状态与数据库脱节。
      */
     override fun observeQuestionsByCard(cardId: String): Flow<List<Question>> =
-        questionDao.observeQuestionsByCard(cardId).map { list ->
-            list.mapModels { entity -> RoomMappers.run { entity.toDomain() } }
+        questionDao.observeQuestionsByCard(cardId).mapEach { entity ->
+            RoomMappers.run { entity.toDomain() }
         }
 
     /**
      * 单对象查询用于评分提交事务等需要精确定位的场景。
      */
-    override suspend fun findById(questionId: String): Question? = withContext(dispatchers.io) {
-        questionDao.findById(questionId).mapModel { entity ->
+    override suspend fun findById(questionId: String): Question? = dispatchers.onIo {
+        questionDao.findById(questionId).mapNullable { entity ->
             RoomMappers.run { entity.toDomain() }
         }
     }
@@ -40,7 +38,7 @@ class OfflineQuestionRepository(
     /**
      * 一次性读取编辑页所需问题快照时直接走同步查询，可以减少不必要的 Flow 建立与首次收集成本。
      */
-    override suspend fun listByCard(cardId: String): List<Question> = withContext(dispatchers.io) {
+    override suspend fun listByCard(cardId: String): List<Question> = dispatchers.onIo {
         questionDao.listByCard(cardId)
             .map { entity -> RoomMappers.run { entity.toDomain() } }
     }
@@ -48,7 +46,7 @@ class OfflineQuestionRepository(
     /**
      * 批量写入可避免逐条保存导致中途失败的半完成状态，符合编辑页“一次保存”的期望。
      */
-    override suspend fun upsertAll(questions: List<Question>) = withContext(dispatchers.io) {
+    override suspend fun upsertAll(questions: List<Question>) = dispatchers.onIo {
         questionDao.upsertAll(questions.map { RoomMappers.run { it.toEntity() } })
         Unit
     }
@@ -56,7 +54,7 @@ class OfflineQuestionRepository(
     /**
      * due 查询必须显式带 active status，才能保证归档问题不进入待复习集合。
      */
-    override suspend fun listDueQuestions(nowEpochMillis: Long): List<Question> = withContext(dispatchers.io) {
+    override suspend fun listDueQuestions(nowEpochMillis: Long): List<Question> = dispatchers.onIo {
         questionDao.listDueQuestions(activeStatus = QuestionEntity.STATUS_ACTIVE, nowEpochMillis = nowEpochMillis)
             .map { entity -> RoomMappers.run { entity.toDomain() } }
     }
@@ -64,7 +62,7 @@ class OfflineQuestionRepository(
     /**
      * 队列页只要下一张卡片 id，因此复用数据库聚合结果能减少无意义的问题对象构建与集合分组。
      */
-    override suspend fun findNextDueCardId(nowEpochMillis: Long): String? = withContext(dispatchers.io) {
+    override suspend fun findNextDueCardId(nowEpochMillis: Long): String? = dispatchers.onIo {
         questionDao.findNextDueCardId(
             activeStatus = QuestionEntity.STATUS_ACTIVE,
             nowEpochMillis = nowEpochMillis
@@ -74,7 +72,7 @@ class OfflineQuestionRepository(
     /**
      * 统计查询委托给数据库聚合实现，以保证卡片/问题去重与过滤规则一致。
      */
-    override suspend fun getTodayReviewSummary(nowEpochMillis: Long): TodayReviewSummary = withContext(dispatchers.io) {
+    override suspend fun getTodayReviewSummary(nowEpochMillis: Long): TodayReviewSummary = dispatchers.onIo {
         val row: TodayReviewSummaryRow = questionDao.getTodayReviewSummary(
             activeStatus = QuestionEntity.STATUS_ACTIVE,
             nowEpochMillis = nowEpochMillis
@@ -89,7 +87,7 @@ class OfflineQuestionRepository(
      * 以 ID 直接删除能让上层不依赖 Entity 类型，
      * 也能避免为了同一条删除路径先执行一次多余查询。
      */
-    override suspend fun delete(questionId: String) = withContext(dispatchers.io) {
+    override suspend fun delete(questionId: String) = dispatchers.onIo {
         questionDao.deleteById(questionId)
         Unit
     }
@@ -97,8 +95,8 @@ class OfflineQuestionRepository(
     /**
      * 批量删除在仓储层收口后，编辑页保存就不必手写循环删除模板，且数据库往返次数更可控。
      */
-    override suspend fun deleteAll(questionIds: Collection<String>) = withContext(dispatchers.io) {
-        if (questionIds.isEmpty()) return@withContext
+    override suspend fun deleteAll(questionIds: Collection<String>) = dispatchers.onIo {
+        if (questionIds.isEmpty()) return@onIo
         questionDao.deleteByIds(questionIds)
         Unit
     }

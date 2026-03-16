@@ -27,8 +27,10 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -107,8 +109,6 @@ fun YikePrimaryScaffold(
     currentDestination: YikePrimaryDestination,
     title: String,
     subtitle: String,
-    onNavigate: ((YikePrimaryDestination) -> Unit)? = null,
-    showNavigationChrome: Boolean = true,
     floatingActionButton: @Composable (() -> Unit)? = null,
     content: @Composable (PaddingValues) -> Unit
 ) {
@@ -135,14 +135,6 @@ fun YikePrimaryScaffold(
                 ) {
                     content(PaddingValues(bottom = contentBottomPadding))
                 }
-            }
-
-            if (showNavigationChrome && onNavigate != null) {
-                YikePrimaryNavigationChrome(
-                    currentDestination = currentDestination,
-                    onNavigate = onNavigate,
-                    modifier = Modifier.align(Alignment.BottomCenter)
-                )
             }
 
             if (floatingActionButton != null) {
@@ -428,6 +420,34 @@ fun YikeStateBanner(
 }
 
 /**
+ * 操作结果反馈经常以“成功/失败二选一”的形式成对出现，抽成共享组件后可以让页面只表达文案差异，
+ * 避免在设置、备份等低频操作页反复手写相同的条件渲染模板。
+ */
+@Composable
+fun YikeOperationFeedback(
+    successMessage: String?,
+    errorMessage: String?,
+    modifier: Modifier = Modifier,
+    successTitle: String = "操作已完成",
+    errorTitle: String = "操作失败"
+) {
+    successMessage?.let { message ->
+        YikeStateBanner(
+            title = successTitle,
+            description = message,
+            modifier = modifier
+        )
+    }
+    errorMessage?.let { message ->
+        YikeStateBanner(
+            title = errorTitle,
+            description = message,
+            modifier = modifier
+        )
+    }
+}
+
+/**
  * 危险提示卡始终使用暖色层级，是为了让删除、恢复等不可逆动作在视觉上立刻可分辨。
  */
 @Composable
@@ -569,6 +589,23 @@ fun YikeListItemCard(
             content = actions
         )
     }
+}
+
+/**
+ * 多个页面都依赖相同的纵向滚动骨架来承载状态卡、列表块和按钮区，
+ * 因此抽成共享容器后可以减少样板代码，并保持页面间的滚动与间距节奏一致。
+ */
+@Composable
+fun YikeScrollableColumn(
+    modifier: Modifier = Modifier,
+    verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(LocalYikeSpacing.current.lg),
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier = modifier.verticalScroll(rememberScrollState()),
+        verticalArrangement = verticalArrangement,
+        content = content
+    )
 }
 
 /**

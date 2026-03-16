@@ -4,17 +4,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kariscode.yike.app.LocalAppContainer
+import com.kariscode.yike.core.message.ErrorMessages
 import com.kariscode.yike.ui.component.YikeFlowScaffold
 import com.kariscode.yike.ui.component.YikePrimaryButton
 import com.kariscode.yike.ui.component.YikeSecondaryButton
+import com.kariscode.yike.ui.component.YikeScrollableColumn
 import com.kariscode.yike.ui.component.YikeStateBanner
 import com.kariscode.yike.ui.component.backNavigationAction
 import com.kariscode.yike.ui.theme.LocalYikeSpacing
@@ -68,10 +68,7 @@ private fun TodayPreviewContent(
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalYikeSpacing.current
-    Column(
-        modifier = modifier.verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(spacing.lg)
-    ) {
+    YikeScrollableColumn(modifier = modifier) {
         when {
             uiState.isLoading -> {
                 YikeStateBanner(
@@ -82,7 +79,7 @@ private fun TodayPreviewContent(
 
             uiState.errorMessage != null -> {
                 YikeStateBanner(
-                    title = "今日预览加载失败",
+                    title = ErrorMessages.PREVIEW_LOAD_FAILED,
                     description = uiState.errorMessage
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {

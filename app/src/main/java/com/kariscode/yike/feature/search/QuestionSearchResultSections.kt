@@ -9,19 +9,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.kariscode.yike.domain.model.QuestionMasteryLevel
-import com.kariscode.yike.domain.model.QuestionStatus
 import com.kariscode.yike.ui.component.YikeBadge
 import com.kariscode.yike.ui.component.YikePrimaryButton
 import com.kariscode.yike.ui.component.YikeProgressBar
 import com.kariscode.yike.ui.component.YikeSecondaryButton
 import com.kariscode.yike.ui.component.YikeStateBanner
 import com.kariscode.yike.ui.component.YikeSurfaceCard
+import com.kariscode.yike.ui.format.formatPreviewDateTime
 import com.kariscode.yike.ui.theme.LocalYikeSpacing
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-
-private val searchDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("M 月 d 日 HH:mm")
 
 /**
  * 结果区在空态时给出下一步建议，是为了避免用户面对 0 结果时不知道该放宽哪一类条件。
@@ -108,11 +103,8 @@ private fun buildAnswerSnippet(item: QuestionSearchResultUiModel): String {
  */
 private fun buildMetaLine(item: QuestionSearchResultUiModel): String {
     val question = item.context.question
-    val statusText = when (question.status) {
-        QuestionStatus.ACTIVE -> "进行中"
-        QuestionStatus.ARCHIVED -> "已归档"
-    }
-    val reviewedAtText = question.lastReviewedAt?.let(::formatSearchDateTime) ?: "尚未复习"
+    val statusText = question.status.displayLabel
+    val reviewedAtText = question.lastReviewedAt?.let(::formatPreviewDateTime) ?: "尚未复习"
     val masteryHint = when (item.mastery.level) {
         QuestionMasteryLevel.NEW -> "新问题"
         QuestionMasteryLevel.LEARNING -> "仍在巩固"
@@ -121,11 +113,3 @@ private fun buildMetaLine(item: QuestionSearchResultUiModel): String {
     }
     return "$statusText · 复习 ${question.reviewCount} 次 · lapse ${question.lapseCount} 次 · 最近复习：$reviewedAtText · $masteryHint"
 }
-
-/**
- * 时间格式统一到月日时分，是为了让搜索结果、预览页和其他详情页保持一致的时间表达方式。
- */
-private fun formatSearchDateTime(epochMillis: Long, zoneId: ZoneId = ZoneId.systemDefault()): String =
-    Instant.ofEpochMilli(epochMillis)
-        .atZone(zoneId)
-        .format(searchDateFormatter)
