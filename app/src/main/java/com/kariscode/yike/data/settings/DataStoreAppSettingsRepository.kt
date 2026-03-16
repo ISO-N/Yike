@@ -60,6 +60,23 @@ class DataStoreAppSettingsRepository(
     }
 
     /**
+     * 整份设置快照通过一次 edit 落盘，能保证备份恢复时不会把同一份状态拆成多次磁盘写入。
+     */
+    override suspend fun setSettings(settings: AppSettings) {
+        dataStore.edit { prefs ->
+            prefs[Keys.dailyReminderEnabled] = settings.dailyReminderEnabled
+            prefs[Keys.dailyReminderHour] = settings.dailyReminderHour
+            prefs[Keys.dailyReminderMinute] = settings.dailyReminderMinute
+            prefs[Keys.schemaVersion] = settings.schemaVersion
+            if (settings.backupLastAt == null) {
+                prefs.remove(Keys.backupLastAt)
+            } else {
+                prefs[Keys.backupLastAt] = settings.backupLastAt
+            }
+        }
+    }
+
+    /**
      * schemaVersion 的写入接口保留在仓储中，是为了未来迁移流程能在同一抽象下更新设置，
      * 而不是让迁移代码依赖 DataStore key。
      */

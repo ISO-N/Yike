@@ -27,6 +27,12 @@ interface AppSettingsRepository {
     suspend fun setDailyReminderTime(hour: Int, minute: Int)
 
     /**
+     * 备份恢复与补偿回滚都需要把一整份设置快照原子替换，
+     * 因此提供批量写入口可以避免调用方自行拼装多次写入顺序而逐步漂移。
+     */
+    suspend fun setSettings(settings: AppSettings)
+
+    /**
      * schemaVersion 作为数据代际标识需要集中维护，
      * 否则备份恢复或未来迁移时难以判断当前数据结构处于哪个阶段。
      */
@@ -37,4 +43,5 @@ interface AppSettingsRepository {
      * 允许写入 null 是为了在用户清理数据或恢复失败时显式回退到“未知/未备份”状态。
      */
     suspend fun setBackupLastAt(epochMillis: Long?)
+
 }

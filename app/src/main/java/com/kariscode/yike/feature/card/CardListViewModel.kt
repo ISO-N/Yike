@@ -3,7 +3,6 @@ package com.kariscode.yike.feature.card
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.kariscode.yike.core.coroutine.parallel
 import com.kariscode.yike.core.id.EntityIds
 import com.kariscode.yike.core.message.ErrorMessages
 import com.kariscode.yike.core.message.SuccessMessages
@@ -18,11 +17,12 @@ import com.kariscode.yike.domain.model.QuestionStatus
 import com.kariscode.yike.domain.repository.CardRepository
 import com.kariscode.yike.domain.repository.DeckRepository
 import com.kariscode.yike.domain.repository.StudyInsightsRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -75,6 +75,22 @@ class CardListViewModel(
     private val studyInsightsRepository: StudyInsightsRepository,
     private val timeProvider: TimeProvider
 ) : ViewModel() {
+    /**
+     * 首屏是否真正完成，需要 deck 元数据和卡片首个发射都到位后再统一关闭 loading，
+     * 这样改成单订阅后仍能保持页面初始化反馈稳定。
+     */
+    private var initialDeckLoaded: Boolean = false
+
+    /**
+     * 列表订阅首次返回前保持 loading，可避免在删除首屏双读后让页面过早进入空列表态。
+     */
+    private var initialCardsLoaded: Boolean = false
+
+    /**
+     * 熟练度摘要用独立 Job 收口，是为了在列表连续发射时只保留最后一次统计，避免无意义叠加查询。
+     */
+    private var masterySummaryJob: Job? = null
+
     private val _uiState = MutableStateFlow(
         CardListUiState(
             deckId = deckId,
@@ -92,47 +108,67 @@ class CardListViewModel(
 
     init {
         /**
-         * 初始数据加载使用 coroutineScope 并行执行 deckName 和卡片列表查询，
-         * 避免顺序执行导致的等待时间叠加。
+         * deck 元数据与卡片列表改成各自独立加载，是为了去掉 `first + collect` 的双读模式，
+         * 同时继续保持列表与标题都能各自实时更新。
          */
-        viewModelScope.launch {
-            val now = timeProvider.nowEpochMillis()
-            val (deck, cards) = parallel(
-                first = { deckRepository.findById(deckId) },
-                second = { cardRepository.observeActiveCardSummaries(deckId, now).catch {}.first() }
-            )
-            _uiState.update {
-                it.copy(
-                    deckName = deck?.name,
-                    items = cards ?: emptyList(),
-                    isLoading = false
-                )
+        viewModelScope.launch { loadDeckMetadata() }
+        viewModelScope.launch { observeCardSummaries() }
+    }
+
+    /**
+     * deck 名称单独读取后，列表订阅就不需要为了首屏并行而额外做一次一次性读取。
+     */
+    private suspend fun loadDeckMetadata() {
+        runCatching { deckRepository.findById(deckId) }
+            .onSuccess { deck ->
+                initialDeckLoaded = true
+                _uiState.update {
+                    it.copy(
+                        deckName = deck?.name,
+                        isLoading = shouldKeepLoading()
+                    )
+                }
             }
-            // 初始加载完成后，启动 Flow 订阅以保持列表实时更新
-            launch {
-                val now = timeProvider.nowEpochMillis()
-                cardRepository.observeActiveCardSummaries(deckId, now)
-                    .catch { throwable ->
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                message = null,
-                                errorMessage = throwable.message ?: ErrorMessages.LOAD_FAILED
-                            )
-                        }
-                    }
-                    .collect { items ->
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                items = items,
-                                errorMessage = null
-                            )
-                        }
-                        refreshMasterySummary()
-                    }
+            .onFailure {
+                initialDeckLoaded = true
+                _uiState.update {
+                    it.copy(
+                        isLoading = shouldKeepLoading(),
+                        message = null,
+                        errorMessage = ErrorMessages.LOAD_FAILED
+                    )
+                }
             }
-        }
+    }
+
+    /**
+     * 卡片列表始终只保留一个订阅入口，是为了让首屏和后续增删改都走同一条状态更新路径。
+     */
+    private suspend fun observeCardSummaries() {
+        val now = timeProvider.nowEpochMillis()
+        cardRepository.observeActiveCardSummaries(deckId, now)
+            .distinctUntilChanged()
+            .catch { throwable ->
+                initialCardsLoaded = true
+                _uiState.update {
+                    it.copy(
+                        isLoading = shouldKeepLoading(),
+                        message = null,
+                        errorMessage = throwable.message ?: ErrorMessages.LOAD_FAILED
+                    )
+                }
+            }
+            .collect { items ->
+                initialCardsLoaded = true
+                _uiState.update {
+                    it.copy(
+                        isLoading = shouldKeepLoading(),
+                        items = items,
+                        errorMessage = null
+                    )
+                }
+                refreshMasterySummary()
+            }
     }
 
     /**
@@ -190,8 +226,6 @@ class CardListViewModel(
         viewModelScope.launch {
             runCatching {
                 val now = timeProvider.nowEpochMillis()
-                // Room 的 upsert 会自动处理"不存在则插入，存在则更新"的逻辑
-                // 直接构建对象并 upsert，无需先查询
                 val card = Card(
                     id = editor.cardId ?: EntityIds.newCardId(),
                     deckId = deckId,
@@ -289,7 +323,8 @@ class CardListViewModel(
      * 使用 groupBy 避免对每个问题重复计算熟练度。
      */
     private fun refreshMasterySummary() {
-        viewModelScope.launch {
+        masterySummaryJob?.cancel()
+        masterySummaryJob = viewModelScope.launch {
             runCatching {
                 val questions = studyInsightsRepository.searchQuestionContexts(
                     filters = QuestionQueryFilters(
@@ -297,7 +332,6 @@ class CardListViewModel(
                         status = QuestionStatus.ACTIVE
                     )
                 )
-                // 先计算一次熟练度，再用 groupBy 分类，避免重复计算
                 val masteryCounts = questions.groupBy { context ->
                     QuestionMasteryCalculator.snapshot(context.question).level
                 }
@@ -315,6 +349,11 @@ class CardListViewModel(
             }
         }
     }
+
+    /**
+     * 首屏 loading 只依赖两个初始化步骤的完成信号，是为了让后续实时更新不再反复切换加载态。
+     */
+    private fun shouldKeepLoading(): Boolean = !(initialDeckLoaded && initialCardsLoaded)
 
     companion object {
         /**

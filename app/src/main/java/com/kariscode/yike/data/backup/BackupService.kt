@@ -3,6 +3,8 @@ package com.kariscode.yike.data.backup
 import android.app.Application
 import android.net.Uri
 import androidx.room.withTransaction
+import com.kariscode.yike.core.coroutine.parallel
+import com.kariscode.yike.core.coroutine.parallel3
 import com.kariscode.yike.core.dispatchers.AppDispatchers
 import com.kariscode.yike.core.time.TimeProvider
 import com.kariscode.yike.data.local.db.YikeDatabase
@@ -23,8 +25,20 @@ import com.kariscode.yike.domain.repository.AppSettingsRepository
 import java.io.FileNotFoundException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+
+/**
+ * 备份快照把设置和各数据表绑定成同一份视图，
+ * 是为了让导出与补偿回滚共享同一套读取边界并避免再次写出串行样板。
+ */
+private data class BackupSnapshot(
+    val settings: AppSettings,
+    val decks: List<DeckEntity>,
+    val cards: List<CardEntity>,
+    val questions: List<QuestionEntity>,
+    val reviewRecords: List<ReviewRecordEntity>
+)
 
 /**
  * 备份服务集中处理导出、校验与恢复，是为了让页面只负责触发文件选择而不触碰高风险数据操作细节。
@@ -84,11 +98,7 @@ class BackupService(
      * 构建备份文档时读取完整数据快照，可确保序列化结果与当下本地状态严格一致。
      */
     private suspend fun buildBackupDocument(exportedAtEpochMillis: Long): BackupDocument {
-        val settings = appSettingsRepository.observeSettings().first()
-        val decks = deckDao.listAll()
-        val cards = cardDao.listAll()
-        val questions = questionDao.listAll()
-        val reviewRecords = reviewRecordDao.listAll()
+        val snapshot = readCurrentSnapshot()
 
         return BackupDocument(
             app = BackupAppInfo(
@@ -97,15 +107,15 @@ class BackupService(
                 exportedAt = BackupJson.formatEpochMillis(exportedAtEpochMillis)
             ),
             settings = BackupSettings(
-                dailyReminderEnabled = settings.dailyReminderEnabled,
-                dailyReminderTime = settings.toBackupReminderTime(),
-                schemaVersion = settings.schemaVersion,
-                backupLastAt = settings.backupLastAt?.let(BackupJson::formatEpochMillis)
+                dailyReminderEnabled = snapshot.settings.dailyReminderEnabled,
+                dailyReminderTime = snapshot.settings.toBackupReminderTime(),
+                schemaVersion = snapshot.settings.schemaVersion,
+                backupLastAt = snapshot.settings.backupLastAt?.let(BackupJson::formatEpochMillis)
             ),
-            decks = decks.map { deck -> deck.toBackup() },
-            cards = cards.map { card -> card.toBackup() },
-            questions = questions.map { question -> question.toBackup() },
-            reviewRecords = reviewRecords.map { reviewRecord -> reviewRecord.toBackup() }
+            decks = snapshot.decks.map { deck -> deck.toBackup() },
+            cards = snapshot.cards.map { card -> card.toBackup() },
+            questions = snapshot.questions.map { question -> question.toBackup() },
+            reviewRecords = snapshot.reviewRecords.map { reviewRecord -> reviewRecord.toBackup() }
         )
     }
 
@@ -113,11 +123,7 @@ class BackupService(
      * 为了做到“恢复失败时当前数据不被修改”，这里先保留旧快照并在设置写入失败时执行补偿恢复。
      */
     private suspend fun restoreDocument(document: BackupDocument) {
-        val previousSettings = appSettingsRepository.observeSettings().first()
-        val previousDecks = deckDao.listAll()
-        val previousCards = cardDao.listAll()
-        val previousQuestions = questionDao.listAll()
-        val previousReviewRecords = reviewRecordDao.listAll()
+        val previousSnapshot = readCurrentSnapshot()
 
         try {
             database.withTransaction {
@@ -140,14 +146,45 @@ class BackupService(
                 cardDao.clearAll()
                 deckDao.clearAll()
 
-                deckDao.upsertAll(previousDecks)
-                cardDao.upsertAll(previousCards)
-                questionDao.upsertAll(previousQuestions)
-                reviewRecordDao.insertAll(previousReviewRecords)
+                deckDao.upsertAll(previousSnapshot.decks)
+                cardDao.upsertAll(previousSnapshot.cards)
+                questionDao.upsertAll(previousSnapshot.questions)
+                reviewRecordDao.insertAll(previousSnapshot.reviewRecords)
             }
-            restorePreviousSettings(previousSettings)
+            restorePreviousSettings(previousSnapshot.settings)
             throw IllegalStateException("恢复失败，当前数据未被修改", throwable)
         }
+    }
+
+    /**
+     * 导出、恢复前快照和失败回滚都依赖同一时刻的数据视图，
+     * 因此统一并行读取可以同时收敛代码路径和等待成本。
+     */
+    private suspend fun readCurrentSnapshot(): BackupSnapshot {
+        val (settings, deckAndCard, questionAndReview) = parallel3(
+            first = { appSettingsRepository.observeSettings().first() },
+            second = {
+                parallel(
+                    first = { deckDao.listAll() },
+                    second = { cardDao.listAll() }
+                )
+            },
+            third = {
+                parallel(
+                    first = { questionDao.listAll() },
+                    second = { reviewRecordDao.listAll() }
+                )
+            }
+        )
+        val (decks, cards) = deckAndCard
+        val (questions, reviewRecords) = questionAndReview
+        return BackupSnapshot(
+            settings = settings,
+            decks = decks,
+            cards = cards,
+            questions = questions,
+            reviewRecords = reviewRecords
+        )
     }
 
     /**
@@ -156,11 +193,13 @@ class BackupService(
     private suspend fun writeSettingsFromBackup(settings: BackupSettings) {
         val (hour, minute) = BackupReminderTimeCodec.parse(settings.dailyReminderTime)
         persistSettings(
-            dailyReminderEnabled = settings.dailyReminderEnabled,
-            dailyReminderHour = hour,
-            dailyReminderMinute = minute,
-            schemaVersion = settings.schemaVersion,
-            backupLastAt = settings.backupLastAt?.let(BackupJson::parseEpochMillis)
+            settings = AppSettings(
+                dailyReminderEnabled = settings.dailyReminderEnabled,
+                dailyReminderHour = hour,
+                dailyReminderMinute = minute,
+                schemaVersion = settings.schemaVersion,
+                backupLastAt = settings.backupLastAt?.let(BackupJson::parseEpochMillis)
+            )
         )
     }
 
@@ -169,29 +208,14 @@ class BackupService(
      * 否则即使数据库回滚成功，提醒配置仍可能与当前数据脱节。
      */
     private suspend fun restorePreviousSettings(settings: AppSettings) {
-        persistSettings(
-            dailyReminderEnabled = settings.dailyReminderEnabled,
-            dailyReminderHour = settings.dailyReminderHour,
-            dailyReminderMinute = settings.dailyReminderMinute,
-            schemaVersion = settings.schemaVersion,
-            backupLastAt = settings.backupLastAt
-        )
+        persistSettings(settings = settings)
     }
 
     /**
-     * 设置字段统一经由同一写入顺序落库，是为了避免恢复成功路径和补偿回滚路径逐步偏离。
+     * 恢复与回滚都通过同一快照入口写入设置，是为了把多字段一致性约束收口到仓储层维护。
      */
-    private suspend fun persistSettings(
-        dailyReminderEnabled: Boolean,
-        dailyReminderHour: Int,
-        dailyReminderMinute: Int,
-        schemaVersion: Int,
-        backupLastAt: Long?
-    ) {
-        appSettingsRepository.setDailyReminderEnabled(dailyReminderEnabled)
-        appSettingsRepository.setDailyReminderTime(dailyReminderHour, dailyReminderMinute)
-        appSettingsRepository.setSchemaVersion(schemaVersion)
-        appSettingsRepository.setBackupLastAt(backupLastAt)
+    private suspend fun persistSettings(settings: AppSettings) {
+        appSettingsRepository.setSettings(settings)
     }
 
     /**
@@ -256,10 +280,7 @@ class BackupService(
         prompt = prompt,
         answer = answer,
         tags = tags,
-        status = when (status) {
-            QuestionStatus.ACTIVE -> QuestionEntity.STATUS_ACTIVE
-            QuestionStatus.ARCHIVED -> QuestionEntity.STATUS_ARCHIVED
-        },
+        status = status.storageValue,
         stageIndex = stageIndex,
         dueAt = BackupJson.formatEpochMillis(dueAt),
         lastReviewedAt = lastReviewedAt?.let(BackupJson::formatEpochMillis),
@@ -323,11 +344,7 @@ class BackupService(
             prompt = this@toEntity.prompt,
             answer = this@toEntity.answer,
             tags = this@toEntity.tags,
-            status = if (this@toEntity.status == QuestionEntity.STATUS_ARCHIVED) {
-                QuestionStatus.ARCHIVED
-            } else {
-                QuestionStatus.ACTIVE
-            },
+            status = QuestionStatus.fromStorageValue(this@toEntity.status),
             stageIndex = this@toEntity.stageIndex,
             dueAt = BackupJson.parseEpochMillis(this@toEntity.dueAt),
             lastReviewedAt = this@toEntity.lastReviewedAt?.let(BackupJson::parseEpochMillis),
