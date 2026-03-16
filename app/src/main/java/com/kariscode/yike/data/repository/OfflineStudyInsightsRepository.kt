@@ -4,7 +4,6 @@ import com.kariscode.yike.core.dispatchers.AppDispatchers
 import com.kariscode.yike.data.local.db.dao.QuestionDao
 import com.kariscode.yike.data.local.db.dao.QuestionContextRow
 import com.kariscode.yike.data.local.db.dao.ReviewRecordDao
-import com.kariscode.yike.data.local.db.entity.QuestionEntity
 import com.kariscode.yike.domain.model.DeckReviewAnalyticsSnapshot
 import com.kariscode.yike.domain.model.Question
 import com.kariscode.yike.domain.model.QuestionContext
@@ -39,7 +38,7 @@ class OfflineStudyInsightsRepository(
             questionDao.listQuestionContexts(
                 keyword = filters.keyword.trim().ifBlank { null },
                 tagKeyword = filters.tag?.trim()?.ifBlank { null },
-                status = filters.status?.toEntityStatus(),
+                status = filters.status?.storageValue,
                 deckId = filters.deckId,
                 cardId = filters.cardId,
                 maxDueAt = null
@@ -55,7 +54,7 @@ class OfflineStudyInsightsRepository(
             questionDao.listQuestionContexts(
                 keyword = null,
                 tagKeyword = null,
-                status = QuestionEntity.STATUS_ACTIVE,
+                status = QuestionStatus.ACTIVE.storageValue,
                 deckId = null,
                 cardId = null,
                 maxDueAt = nowEpochMillis
@@ -66,7 +65,7 @@ class OfflineStudyInsightsRepository(
      * 标签建议在仓储层完成解析与去重，是为了让不同页面共享同一套“常用标签”排序方式。
      */
     override suspend fun listAvailableTags(limit: Int): List<String> = withContext(dispatchers.io) {
-        questionDao.listTagsJson(activeStatus = QuestionEntity.STATUS_ACTIVE)
+        questionDao.listTagsJson(activeStatus = QuestionStatus.ACTIVE.storageValue)
             .flatMap(::decodeTags)
             .map(String::trim)
             .filter(String::isNotBlank)
@@ -124,7 +123,7 @@ class OfflineStudyInsightsRepository(
             prompt = row.prompt,
             answer = row.answer,
             tags = decodeTags(row.tagsJson),
-            status = row.status.toQuestionStatus(),
+            status = QuestionStatus.fromStorageValue(row.status),
             stageIndex = row.stageIndex,
             dueAt = row.dueAt,
             lastReviewedAt = row.lastReviewedAt,
@@ -151,22 +150,6 @@ class OfflineStudyInsightsRepository(
             QuestionMasteryCalculator.snapshot(context.question).level == expectedLevel
         }
     } ?: this
-
-    /**
-     * 题目状态在仓储层做显式映射，是为了避免上层把 Room 常量直接泄露到 domain 层。
-     */
-    private fun QuestionStatus.toEntityStatus(): String = when (this) {
-        QuestionStatus.ACTIVE -> QuestionEntity.STATUS_ACTIVE
-        QuestionStatus.ARCHIVED -> QuestionEntity.STATUS_ARCHIVED
-    }
-
-    /**
-     * 反向映射集中在本地辅助函数里，是为了让拼装 QuestionContext 时不依赖更重的 Entity 包装。
-     */
-    private fun String.toQuestionStatus(): QuestionStatus = when (this) {
-        QuestionEntity.STATUS_ARCHIVED -> QuestionStatus.ARCHIVED
-        else -> QuestionStatus.ACTIVE
-    }
 
     /**
      * 标签解析规则保持和 Room 映射层一致，是为了让搜索候选不会因为解析差异漏掉已有标签。

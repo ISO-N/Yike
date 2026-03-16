@@ -9,7 +9,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.kariscode.yike.domain.model.QuestionMasteryLevel
-import com.kariscode.yike.domain.model.QuestionStatus
 import com.kariscode.yike.ui.component.YikeBadge
 import com.kariscode.yike.ui.component.YikePrimaryButton
 import com.kariscode.yike.ui.component.YikeProgressBar
@@ -106,10 +105,7 @@ private fun buildAnswerSnippet(item: QuestionSearchResultUiModel): String {
  */
 private fun buildMetaLine(item: QuestionSearchResultUiModel): String {
     val question = item.context.question
-    val statusText = when (question.status) {
-        QuestionStatus.ACTIVE -> "进行中"
-        QuestionStatus.ARCHIVED -> "已归档"
-    }
+    val statusText = question.status.displayLabel
     val reviewedAtText = question.lastReviewedAt?.let(::formatSearchDateTime) ?: "尚未复习"
     val masteryHint = when (item.mastery.level) {
         QuestionMasteryLevel.NEW -> "新问题"

@@ -122,27 +122,36 @@ object RoomMappers {
         note = note
     )
 
-    private fun encodeStatus(status: QuestionStatus): String = when (status) {
-        QuestionStatus.ACTIVE -> QuestionEntity.STATUS_ACTIVE
-        QuestionStatus.ARCHIVED -> QuestionEntity.STATUS_ARCHIVED
-    }
+    /**
+     * Room 状态字段统一走领域枚举自带的存储值，是为了让持久化边界只维护一套状态编码规则。
+     */
+    private fun encodeStatus(status: QuestionStatus): String = status.storageValue
 
-    private fun decodeStatus(status: String): QuestionStatus = when (status) {
-        QuestionEntity.STATUS_ARCHIVED -> QuestionStatus.ARCHIVED
-        else -> QuestionStatus.ACTIVE
-    }
+    /**
+     * 反向解析收口到领域模型后，数据层就不需要为同一套默认值语义重复维护多个 `when` 分支。
+     */
+    private fun decodeStatus(status: String): QuestionStatus = QuestionStatus.fromStorageValue(status)
 
+    /**
+     * 评分字符串保持宽松兜底，是为了让历史备份或异常脏数据不会因为单条记录失效而中断整个读取流程。
+     */
     private fun decodeRating(rating: String): ReviewRating = runCatching {
         ReviewRating.valueOf(rating)
     }.getOrElse {
         ReviewRating.AGAIN
     }
 
+    /**
+     * 标签编码继续集中在映射层，是为了让数据库字段格式调整时不必让仓储和页面感知 JSON 细节。
+     */
     private fun encodeTags(tags: List<String>): String = json.encodeToString(
         serializer = tagsSerializer,
         value = tags
     )
 
+    /**
+     * 标签解码失败时回退空列表，是为了保证单条题目脏数据不会让整个列表查询失去可用性。
+     */
     private fun decodeTags(tagsJson: String): List<String> = runCatching {
         json.decodeFromString(
             deserializer = tagsSerializer,
