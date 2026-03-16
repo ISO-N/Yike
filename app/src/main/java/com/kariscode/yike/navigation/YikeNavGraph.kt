@@ -169,7 +169,7 @@ fun YikeNavGraph(
             }
 
             composable(
-                route = YikeDestination.QUESTION_SEARCH,
+                route = YikeDestination.QUESTION_SEARCH_ROUTE,
                 arguments = listOf(
                     navArgument(NavArguments.DECK_ID) {
                         type = NavType.StringType

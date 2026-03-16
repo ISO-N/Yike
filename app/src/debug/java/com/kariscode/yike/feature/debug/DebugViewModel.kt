@@ -11,6 +11,8 @@ import com.kariscode.yike.data.local.db.YikeDatabase
 import com.kariscode.yike.data.local.db.entity.CardEntity
 import com.kariscode.yike.data.local.db.entity.DeckEntity
 import com.kariscode.yike.data.local.db.entity.QuestionEntity
+import com.kariscode.yike.data.local.db.entity.ReviewRecordEntity
+import com.kariscode.yike.domain.model.ReviewRating
 import java.util.UUID
 import kotlin.random.Random
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +31,21 @@ private const val ONE_DAY_MILLIS: Long = 24L * 60L * 60L * 1000L
 
 private val DECK_TOPICS: List<String> = listOf("旅行英语", "历史时间线", "前端术语", "日常口语", "算法基础")
 private val CARD_TOPICS: List<String> = listOf("概念", "例句", "易错点", "回顾", "比较")
+private val QUESTION_PATTERNS: List<String> = listOf(
+    "为什么 {topic} 很重要？",
+    "{topic} 的核心定义是什么？",
+    "如何区分 {topic} 与相近概念？",
+    "{topic} 在实际场景里如何使用？",
+    "{topic} 最容易出错的地方是什么？"
+)
+private val ANSWER_PATTERNS: List<String> = listOf(
+    "{topic} 主要用于帮助快速建立记忆锚点。",
+    "回答时应先说出定义，再补一个最常见的例子。",
+    "如果混淆了 {topic}，通常是因为忽略了适用前提。",
+    "这类题更适合用短句回答，先抓关键词再展开。",
+    "{topic} 和相近概念的边界是调试页面重点观察的地方。"
+)
+private val TAG_POOL: List<String> = listOf("debug", "generated", "核心", "易错", "定义", "例句", "应用", "对比")
 
 /**
  * 生成结果单独建模是为了让 ViewModel 在更新 UI 时只暴露稳定摘要，
@@ -100,10 +117,12 @@ class DebugViewModel(
             val deckDao = database.deckDao()
             val cardDao = database.cardDao()
             val questionDao = database.questionDao()
+            val reviewRecordDao = database.reviewRecordDao()
 
             val decks = mutableListOf<DeckEntity>()
             val cards = mutableListOf<CardEntity>()
             val questions = mutableListOf<QuestionEntity>()
+            val reviewRecords = mutableListOf<ReviewRecordEntity>()
 
             repeat(DEFAULT_DECK_COUNT) { deckIndex ->
                 val deck = createDeck(deckIndex = deckIndex, nowEpochMillis = nowEpochMillis)
@@ -163,10 +182,15 @@ class DebugViewModel(
                 }
             }
 
+            questions.forEach { question ->
+                reviewRecords += createReviewRecordsForQuestion(question = question, nowEpochMillis = nowEpochMillis)
+            }
+
             database.withTransaction {
                 deckDao.upsertAll(decks)
                 cardDao.upsertAll(cards)
                 questionDao.upsertAll(questions)
+                reviewRecordDao.insertAll(reviewRecords)
             }
 
             DebugGenerationSummary(
@@ -225,23 +249,65 @@ class DebugViewModel(
         dueToday: Boolean,
         nowEpochMillis: Long
     ): QuestionEntity {
-        val stageIndex = Random.nextInt(from = 0, until = 4)
+        val reviewCount = Random.nextInt(from = 0, until = 7)
+        val stageIndex = if (reviewCount == 0) 0 else Random.nextInt(from = 0, until = 7)
         val dueOffsetDays = if (dueToday) 0 else Random.nextInt(from = 1, until = 8)
+        val lapseCount = if (reviewCount == 0) 0 else Random.nextInt(from = 0, until = minOf(3, reviewCount + 1))
+        val topic = "${card.title} ${CARD_TOPICS[(cardPosition + questionIndex) % CARD_TOPICS.size]}"
+        val promptTemplate = QUESTION_PATTERNS.random()
+        val answerTemplate = ANSWER_PATTERNS.random()
+        val tags = buildList {
+            add("debug")
+            add("generated")
+            add(TAG_POOL[(cardPosition + questionIndex) % TAG_POOL.size])
+            add(TAG_POOL[(cardPosition + questionIndex + 2) % TAG_POOL.size])
+        }.distinct()
         return QuestionEntity(
             id = "q_${UUID.randomUUID()}",
             cardId = card.id,
-            prompt = "请回忆卡片 ${cardPosition + 1} 的测试问题 ${questionIndex + 1}。",
-            answer = "这是用于开发验证的参考答案 ${questionIndex + 1}。",
-            tagsJson = """["debug","generated","card_${cardPosition + 1}"]""",
+            prompt = promptTemplate.replace("{topic}", topic),
+            answer = answerTemplate.replace("{topic}", topic),
+            tagsJson = tags.joinToString(prefix = "[\"", postfix = "\"]", separator = "\",\""),
             status = QuestionEntity.STATUS_ACTIVE,
             stageIndex = stageIndex,
             dueAt = nowEpochMillis + dueOffsetDays * ONE_DAY_MILLIS,
-            lastReviewedAt = if (stageIndex == 0) null else nowEpochMillis - stageIndex * ONE_DAY_MILLIS,
-            reviewCount = stageIndex,
-            lapseCount = if (stageIndex == 0) 0 else Random.nextInt(from = 0, until = 2),
+            lastReviewedAt = if (reviewCount == 0) null else nowEpochMillis - Random.nextLong(from = 1L, until = 21L) * ONE_DAY_MILLIS,
+            reviewCount = reviewCount,
+            lapseCount = lapseCount,
             createdAt = nowEpochMillis,
             updatedAt = nowEpochMillis
         )
+    }
+
+    /**
+     * 补充随机复习记录，是为了让统计页和今日预估时长真正能反映 AGAIN 比例与响应时间分布。
+     */
+    private fun createReviewRecordsForQuestion(
+        question: QuestionEntity,
+        nowEpochMillis: Long
+    ): List<ReviewRecordEntity> {
+        if (question.reviewCount <= 0) return emptyList()
+        return List(question.reviewCount) { reviewIndex ->
+            val rating = listOf(
+                ReviewRating.AGAIN,
+                ReviewRating.HARD,
+                ReviewRating.GOOD,
+                ReviewRating.EASY
+            ).random()
+            val reviewedAt = nowEpochMillis - (reviewIndex + 1L) * Random.nextLong(from = 1L, until = 6L) * ONE_DAY_MILLIS
+            ReviewRecordEntity(
+                id = "review_${UUID.randomUUID()}",
+                questionId = question.id,
+                rating = rating.name,
+                oldStageIndex = (question.stageIndex - 1).coerceAtLeast(0),
+                newStageIndex = question.stageIndex,
+                oldDueAt = question.dueAt - ONE_DAY_MILLIS,
+                newDueAt = question.dueAt,
+                reviewedAt = reviewedAt,
+                responseTimeMs = Random.nextLong(from = 2_500L, until = 32_000L),
+                note = if (rating == ReviewRating.AGAIN) "调试样本：再次遗忘" else ""
+            )
+        }
     }
 
     companion object {

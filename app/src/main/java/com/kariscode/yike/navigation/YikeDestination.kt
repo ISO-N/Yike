@@ -20,7 +20,8 @@ object YikeDestination {
 
     const val CARD_LIST = "card_list/{deckId}"
     const val QUESTION_EDITOR = "question_editor/{cardId}?deckId={deckId}"
-    const val QUESTION_SEARCH = "question_search?deckId={deckId}&cardId={cardId}"
+    const val QUESTION_SEARCH = "question_search"
+    const val QUESTION_SEARCH_ROUTE = "question_search?deckId={deckId}&cardId={cardId}"
 
     fun reviewCard(cardId: String): String = "review_card/$cardId"
 
@@ -44,8 +45,7 @@ object YikeDestination {
             deckId?.let { add("deckId=$it") }
             cardId?.let { add("cardId=$it") }
         }
-        val route = "question_search"
-        if (params.isEmpty()) return route
-        return "$route?${params.joinToString("&")}".toUri().toString()
+        if (params.isEmpty()) return QUESTION_SEARCH
+        return "$QUESTION_SEARCH?${params.joinToString("&")}"
     }
 }
