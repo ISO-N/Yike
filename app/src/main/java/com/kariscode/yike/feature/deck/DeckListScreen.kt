@@ -276,7 +276,7 @@ private fun DeckSummaryCard(
                 modifier = Modifier.weight(1f)
             )
             YikeSecondaryButton(
-                text = "回收站",
+                text = "移入回收站",
                 onClick = onDelete,
                 modifier = Modifier.weight(1f)
             )
