@@ -37,7 +37,7 @@ class OfflineReviewRepository(
                 cardId = cardId,
                 activeStatus = QuestionEntity.STATUS_ACTIVE,
                 nowEpochMillis = nowEpochMillis
-            ).mapModels { entity -> RoomMappers.run { entity.toDomain() } }
+            ).map { entity -> RoomMappers.run { entity.toDomain() } }
         }
 
     /**

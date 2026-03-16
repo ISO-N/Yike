@@ -140,13 +140,6 @@ class SettingsViewModel(
     }
 
     /**
-     * 临时消息在展示后可主动清除，避免用户返回页面时重复看到旧反馈。
-     */
-    fun onMessageConsumed() {
-        _uiState.update { it.copy(message = null, errorMessage = null) }
-    }
-
-    /**
      * 开关写入与提醒重建封装成一个入口，是为了保证成功与失败反馈都围绕同一条业务路径。
      */
     private fun persistReminderEnabled(enabled: Boolean, showPermissionWarning: Boolean) {

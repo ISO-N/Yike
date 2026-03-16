@@ -20,3 +20,12 @@ fun formatLocalDateTime(epochMillis: Long, zoneId: ZoneId = ZoneId.systemDefault
 object UiDateTimeFormatters {
     val PREVIEW_DATE = DateTimeFormatter.ofPattern("M 月 d 日 HH:mm")
 }
+
+/**
+ * 预览类时间统一格式化到月日时分，是为了让搜索结果、今日预览和后续复习入口对“本地到期时间”保持同一口径，
+ * 避免页面各自重复写 `Instant -> ZoneId -> Formatter` 的模板。
+ */
+fun formatPreviewDateTime(epochMillis: Long, zoneId: ZoneId = ZoneId.systemDefault()): String =
+    Instant.ofEpochMilli(epochMillis)
+        .atZone(zoneId)
+        .format(UiDateTimeFormatters.PREVIEW_DATE)

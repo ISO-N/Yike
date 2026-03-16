@@ -106,24 +106,21 @@ class QuestionSearchViewModel(
      * 关键字直接驱动搜索，是为了把“想到什么就搜什么”的主路径保持足够顺手。
      */
     fun onKeywordChange(value: String) {
-        _uiState.update { it.copy(keyword = value, errorMessage = null) }
-        search()
+        updateSearchFilters { it.copy(keyword = value, errorMessage = null) }
     }
 
     /**
      * 标签作为单选入口即可满足 P0，能减少同一轮搜索叠加过多条件导致的空结果。
      */
     fun onTagSelected(tag: String?) {
-        _uiState.update { it.copy(selectedTag = tag, errorMessage = null) }
-        search()
+        updateSearchFilters { it.copy(selectedTag = tag, errorMessage = null) }
     }
 
     /**
      * 状态筛选显式允许“全部”，是为了在需要排查归档题时不必切到其他页面。
      */
     fun onStatusSelected(status: QuestionStatus?) {
-        _uiState.update { it.copy(selectedStatus = status, errorMessage = null) }
-        search()
+        updateSearchFilters { it.copy(selectedStatus = status, errorMessage = null) }
     }
 
     /**
@@ -148,36 +145,31 @@ class QuestionSearchViewModel(
      * 卡片筛选单独切换即可，因为它已经建立在当前卡组上下文之上，不需要再清空其他条件。
      */
     fun onCardSelected(cardId: String?) {
-        _uiState.update { it.copy(selectedCardId = cardId, errorMessage = null) }
-        search()
+        updateSearchFilters { it.copy(selectedCardId = cardId, errorMessage = null) }
     }
 
     /**
      * 熟练度筛选复用统一等级定义，是为了让搜索结果与卡片摘要看到的是同一套标签语义。
      */
     fun onMasterySelected(level: QuestionMasteryLevel?) {
-        _uiState.update { it.copy(selectedMasteryLevel = level, errorMessage = null) }
-        search()
+        updateSearchFilters { it.copy(selectedMasteryLevel = level, errorMessage = null) }
     }
 
     /**
      * 一键清空保留“进行中”默认状态，是为了把搜索快速拉回最常用的题库工作流。
      */
     fun onClearFilters() {
-        viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    keyword = "",
-                    selectedTag = null,
-                    selectedStatus = QuestionStatus.ACTIVE,
-                    selectedDeckId = null,
-                    selectedCardId = null,
-                    selectedMasteryLevel = null,
-                    cardOptions = emptyList(),
-                    errorMessage = null
-                )
-            }
-            search()
+        updateSearchFilters {
+            it.copy(
+                keyword = "",
+                selectedTag = null,
+                selectedStatus = QuestionStatus.ACTIVE,
+                selectedDeckId = null,
+                selectedCardId = null,
+                selectedMasteryLevel = null,
+                cardOptions = emptyList(),
+                errorMessage = null
+            )
         }
     }
 
@@ -235,6 +227,17 @@ class QuestionSearchViewModel(
         return cardRepository.observeActiveCards(deckId)
             .first()
             .map { card -> SearchCardOption(id = card.id, title = card.title) }
+    }
+
+    /**
+     * 关键字、标签和熟练度等筛选项都走同一更新入口，是为了让“改筛选后立即搜索”的约束只维护一处，
+     * 避免后续新增条件时漏掉触发搜索或清空旧错误提示。
+     */
+    private fun updateSearchFilters(
+        transform: (QuestionSearchUiState) -> QuestionSearchUiState
+    ) {
+        _uiState.update(transform)
+        search()
     }
 
     companion object {

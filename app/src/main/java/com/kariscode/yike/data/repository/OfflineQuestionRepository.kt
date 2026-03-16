@@ -25,14 +25,14 @@ class OfflineQuestionRepository(
      */
     override fun observeQuestionsByCard(cardId: String): Flow<List<Question>> =
         questionDao.observeQuestionsByCard(cardId).map { list ->
-            list.mapModels { entity -> RoomMappers.run { entity.toDomain() } }
+            list.map { entity -> RoomMappers.run { entity.toDomain() } }
         }
 
     /**
      * 单对象查询用于评分提交事务等需要精确定位的场景。
      */
     override suspend fun findById(questionId: String): Question? = withContext(dispatchers.io) {
-        questionDao.findById(questionId).mapModel { entity ->
+        questionDao.findById(questionId)?.let { entity ->
             RoomMappers.run { entity.toDomain() }
         }
     }

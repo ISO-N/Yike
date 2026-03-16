@@ -25,7 +25,7 @@ class OfflineCardRepository(
      */
     override fun observeActiveCards(deckId: String): Flow<List<Card>> =
         cardDao.observeActiveCards(deckId).map { list ->
-            list.mapModels { entity -> RoomMappers.run { entity.toDomain() } }
+            list.map { entity -> RoomMappers.run { entity.toDomain() } }
         }
 
     /**
@@ -43,7 +43,7 @@ class OfflineCardRepository(
      * cardId 查询用于编辑页/复习页基于路由参数重建内容。
      */
     override suspend fun findById(cardId: String): Card? = withContext(dispatchers.io) {
-        cardDao.findById(cardId).mapModel { entity ->
+        cardDao.findById(cardId)?.let { entity ->
             RoomMappers.run { entity.toDomain() }
         }
     }

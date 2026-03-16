@@ -25,7 +25,7 @@ class OfflineDeckRepository(
      */
     override fun observeActiveDecks(): Flow<List<Deck>> =
         deckDao.observeActiveDecks().map { list ->
-            list.mapModels { entity -> RoomMappers.run { entity.toDomain() } }
+            list.map { entity -> RoomMappers.run { entity.toDomain() } }
         }
 
     /**
@@ -56,7 +56,7 @@ class OfflineDeckRepository(
      * IO 查询放在 dispatchers.io 上执行，避免在主线程触发磁盘读写导致卡顿。
      */
     override suspend fun findById(deckId: String): Deck? = withContext(dispatchers.io) {
-        deckDao.findById(deckId).mapModel { entity ->
+        deckDao.findById(deckId)?.let { entity ->
             RoomMappers.run { entity.toDomain() }
         }
     }
