@@ -24,6 +24,9 @@
 
 ```text
 home
+today_preview
+review_analytics
+question_search?deckId={deckId}&cardId={cardId}
 deck_list
 card_list/{deckId}
 question_editor/{cardId}?deckId={deckId}
@@ -45,12 +48,19 @@ debug
 
 ```text
 首页 home
+  -> 今日复习预览
+      -> today_preview
+  -> 复习统计
+      -> review_analytics
+  -> 问题搜索
+      -> question_search?deckId={deckId}&cardId={cardId}
   -> 开始复习
       -> review_queue
           -> review_card/{cardId}
   -> 卡组列表
       -> deck_list
           -> card_list/{deckId}
+              -> question_search?deckId={deckId}&cardId={cardId}
               -> question_editor/{cardId}
   -> 设置
       -> settings
@@ -65,7 +75,7 @@ debug
 - 内容管理与复习流彼此独立。
 - 设置页只承载全局能力，不承载内容管理。
 - 已落地实现中，`home`、`deck_list`、`settings` 共享一级导航壳；
-  `card_list`、`question_editor`、`review_queue`、`review_card`、`backup_restore` 保持流内导航，不展示底部导航。
+  `card_list`、`question_editor`、`review_queue`、`review_card`、`backup_restore`、`today_preview`、`review_analytics`、`question_search` 保持流内导航，不展示底部导航。
 - 一级导航壳采用紧凑页头 + 悬浮底部胶囊导航，避免顶部说明和底部底板过度挤占内容首屏。
 - 一级导航切换统一使用 `launchSingleTop + restoreState + popUpTo(saveState)`，并补充桌面式左右滑动转场；共享底部导航壳层固定在外层，只让内容区发生位移。
 - 一级页内容需要为悬浮导航预留底部安全区，但不再依赖 `Scaffold.bottomBar` 预留固定布局区域。
@@ -95,6 +105,22 @@ debug
 
 - 必填：`cardId`
 - 用途：进入一张卡片的当次到期问题复习流
+
+### 5.4 `question_search?deckId={deckId}&cardId={cardId}`
+
+- 可选：`deckId`
+- 可选：`cardId`
+- 用途：支持首页进入全局题库搜索，也支持卡片页直接进入“检索本卡”
+
+### 5.5 `today_preview`
+
+- 无参数
+- 用途：开始复习前查看今日任务规模、预计耗时和分组信息
+
+### 5.6 `review_analytics`
+
+- 无参数
+- 用途：查看连续学习、评分分布、遗忘率和平均响应时间
 
 ---
 
@@ -436,7 +462,110 @@ error: SettingsError?
 
 ---
 
-## 15. 备份与恢复页 `BackupRestoreScreen`
+## 15. 今日预览页 `TodayPreviewScreen`
+
+### 15.1 页面职责
+
+- 展示今日待复习问题总量与预计耗时
+- 按卡组、卡片分组展示当日任务
+- 输出低熟练度题目的优先处理提示
+
+### 15.2 `TodayPreviewUiState` 建议
+
+```text
+isLoading: Boolean
+totalDueQuestions: Int
+totalDueCards: Int
+totalDecks: Int
+estimatedMinutes: Int
+averageSecondsPerQuestion: Int
+lowMasteryCount: Int
+earliestDueAt: Long?
+deckGroups: List<TodayPreviewDeckUiModel>
+errorMessage: String?
+```
+
+### 15.3 关键事件
+
+- `OnRefresh`
+- `OnStartReviewClick`
+- `OnOpenAnalyticsClick`
+- `OnOpenSearchClick`
+
+---
+
+## 16. 统计页 `AnalyticsScreen`
+
+### 16.1 页面职责
+
+- 展示连续学习天数
+- 展示 AGAIN/HARD/GOOD/EASY 评分分布
+- 展示遗忘率与平均响应时间
+- 输出下一步行动建议
+
+### 16.2 `AnalyticsUiState` 建议
+
+```text
+isLoading: Boolean
+selectedRange: AnalyticsRange
+streakDays: Int
+totalReviews: Int
+averageResponseSeconds: Int
+forgettingRatePercent: Int
+distributions: List<AnalyticsDistributionUiModel>
+deckBreakdowns: List<AnalyticsDeckUiModel>
+conclusion: String?
+errorMessage: String?
+```
+
+### 16.3 关键事件
+
+- `OnRangeSelected`
+- `OnRefresh`
+- `OnOpenPreviewClick`
+- `OnOpenSearchClick`
+
+---
+
+## 17. 搜索页 `QuestionSearchScreen`
+
+### 17.1 页面职责
+
+- 提供问题/答案全文搜索
+- 提供标签、状态、卡组、卡片筛选
+- 提供熟练度筛选
+- 在结果中暴露“编辑问题 / 立即复习”动作
+
+### 17.2 `QuestionSearchUiState` 建议
+
+```text
+isLoading: Boolean
+keyword: String
+selectedTag: String?
+selectedStatus: QuestionStatus?
+selectedDeckId: String?
+selectedCardId: String?
+selectedMasteryLevel: QuestionMasteryLevel?
+availableTags: List<String>
+deckOptions: List<SearchDeckOption>
+cardOptions: List<SearchCardOption>
+results: List<QuestionSearchResultUiModel>
+errorMessage: String?
+```
+
+### 17.3 关键事件
+
+- `OnKeywordChange`
+- `OnTagSelected`
+- `OnStatusSelected`
+- `OnDeckSelected`
+- `OnCardSelected`
+- `OnMasterySelected`
+- `OnClearFilters`
+
+---
+
+## 18. 备份与恢复页 `BackupRestoreScreen`
 
 ### 15.1 页面职责
 
@@ -469,29 +598,31 @@ error: BackupRestoreError?
 
 ---
 
-## 16. 导航返回策略
+## 19. 导航返回策略
 
-### 16.1 内容管理流
+### 19.1 内容管理流
 
 - `question_editor` 返回 `card_list`
+- `question_search` 若带 `deckId/cardId` 进入，返回 `card_list`
 - `card_list` 返回 `deck_list`
 - `deck_list` 返回 `home`
 
-### 16.2 复习流
+### 19.2 复习流
 
 - 从 `review_card` 返回时，弹出确认提示
 - 用户确认退出后，返回 `home`
 - 若当前卡已完成，继续下一张时优先回到 `review_queue`
 
-### 16.3 设置流
+### 19.3 设置流
 
 - `backup_restore` 返回 `settings`
 - `settings` 返回 `home`
 - `debug` 返回 `home`
+- `today_preview`、`review_analytics`、`question_search` 默认回退到来源页，若无来源则返回 `home`
 
 ---
 
-## 17. 页面间通信原则
+## 20. 页面间通信原则
 
 不建议通过 SavedStateHandle 传递大对象。
 
@@ -510,7 +641,7 @@ error: BackupRestoreError?
 
 ---
 
-## 18. 进程重建与状态恢复
+## 21. 进程重建与状态恢复
 
 第一版至少保证以下能力：
 
@@ -525,7 +656,7 @@ error: BackupRestoreError?
 
 ---
 
-## 19. 结论
+## 22. 结论
 
 忆刻 v0.1 的导航设计应坚持：
 
