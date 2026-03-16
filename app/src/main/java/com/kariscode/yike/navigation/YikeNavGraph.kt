@@ -24,8 +24,11 @@ import com.kariscode.yike.feature.card.CardListScreen
 import com.kariscode.yike.feature.deck.DeckListScreen
 import com.kariscode.yike.feature.editor.QuestionEditorScreen
 import com.kariscode.yike.feature.home.HomeScreen
+import com.kariscode.yike.feature.analytics.AnalyticsScreen
+import com.kariscode.yike.feature.preview.TodayPreviewScreen
 import com.kariscode.yike.feature.review.ReviewCardScreen
 import com.kariscode.yike.feature.review.ReviewQueueScreen
+import com.kariscode.yike.feature.search.QuestionSearchScreen
 import com.kariscode.yike.feature.settings.SettingsScreen
 import com.kariscode.yike.ui.component.YikePrimaryDestination
 import com.kariscode.yike.ui.component.YikePrimaryNavigationChrome
@@ -61,6 +64,9 @@ fun YikeNavGraph(
             composable(route = YikeDestination.HOME) {
                 HomeScreen(
                     onStartReview = { navController.navigate(YikeDestination.REVIEW_QUEUE) },
+                    onOpenTodayPreview = { navController.navigate(YikeDestination.TODAY_PREVIEW) },
+                    onOpenAnalytics = { navController.navigate(YikeDestination.REVIEW_ANALYTICS) },
+                    onOpenSearch = { navController.navigate(YikeDestination.questionSearch()) },
                     onOpenDeckList = { navController.navigatePrimaryDestination(YikeDestination.DECK_LIST) },
                     onOpenSettings = { navController.navigatePrimaryDestination(YikeDestination.SETTINGS) },
                     onOpenDebug = { navController.navigate(YikeDestination.DEBUG) }
@@ -81,6 +87,10 @@ fun YikeNavGraph(
                 CardListScreen(
                     deckId = deckId,
                     onBack = { navController.popBackStack() },
+                    onOpenTodayPreview = { navController.navigate(YikeDestination.TODAY_PREVIEW) },
+                    onOpenSearch = { cardId ->
+                        navController.navigate(YikeDestination.questionSearch(deckId = deckId, cardId = cardId))
+                    },
                     onEditCard = { cardId ->
                         navController.navigate(YikeDestination.questionEditor(cardId = cardId, deckId = deckId))
                     }
@@ -138,6 +148,56 @@ fun YikeNavGraph(
             composable(route = YikeDestination.BACKUP_RESTORE) {
                 BackupRestoreScreen(
                     onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(route = YikeDestination.TODAY_PREVIEW) {
+                TodayPreviewScreen(
+                    onBack = { navController.popBackStack() },
+                    onStartReview = { navController.navigate(YikeDestination.REVIEW_QUEUE) },
+                    onOpenAnalytics = { navController.navigate(YikeDestination.REVIEW_ANALYTICS) },
+                    onOpenSearch = { navController.navigate(YikeDestination.questionSearch()) }
+                )
+            }
+
+            composable(route = YikeDestination.REVIEW_ANALYTICS) {
+                AnalyticsScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenPreview = { navController.navigate(YikeDestination.TODAY_PREVIEW) },
+                    onOpenSearch = { navController.navigate(YikeDestination.questionSearch()) }
+                )
+            }
+
+            composable(
+                route = YikeDestination.QUESTION_SEARCH,
+                arguments = listOf(
+                    navArgument(NavArguments.DECK_ID) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument(NavArguments.CARD_ID) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) { entry ->
+                QuestionSearchScreen(
+                    initialDeckId = entry.optionalStringArg(NavArguments.DECK_ID),
+                    initialCardId = entry.optionalStringArg(NavArguments.CARD_ID),
+                    onBack = { navController.popBackStack() },
+                    onOpenEditor = { cardId ->
+                        navController.navigate(
+                            YikeDestination.questionEditor(
+                                cardId = cardId,
+                                deckId = entry.optionalStringArg(NavArguments.DECK_ID)
+                            )
+                        )
+                    },
+                    onOpenReview = { cardId ->
+                        navController.navigate(YikeDestination.reviewCard(cardId))
+                    }
                 )
             }
 

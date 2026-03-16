@@ -36,6 +36,9 @@ import com.kariscode.yike.ui.theme.LocalYikeSpacing
 @Composable
 fun HomeScreen(
     onStartReview: () -> Unit,
+    onOpenTodayPreview: () -> Unit,
+    onOpenAnalytics: () -> Unit,
+    onOpenSearch: () -> Unit,
     onOpenDeckList: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenDebug: () -> Unit = {},
@@ -60,6 +63,9 @@ fun HomeScreen(
             uiState = uiState,
             onRetry = viewModel::refresh,
             onStartReview = onStartReview,
+            onOpenTodayPreview = onOpenTodayPreview,
+            onOpenAnalytics = onOpenAnalytics,
+            onOpenSearch = onOpenSearch,
             onOpenDeckList = onOpenDeckList,
             onOpenSettings = onOpenSettings,
             onOpenDebug = onOpenDebug,
@@ -77,6 +83,9 @@ fun HomeContent(
     uiState: HomeUiState,
     onRetry: () -> Unit,
     onStartReview: () -> Unit,
+    onOpenTodayPreview: () -> Unit,
+    onOpenAnalytics: () -> Unit,
+    onOpenSearch: () -> Unit,
     onOpenDeckList: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenDebug: () -> Unit,
@@ -124,11 +133,14 @@ fun HomeContent(
                     dueCards = dueCards,
                     dueQuestions = dueQuestions,
                     onStartReview = onStartReview,
-                    onOpenDeckList = onOpenDeckList
+                    onOpenTodayPreview = onOpenTodayPreview
                 )
                 HomeRhythmSection(
                     dueQuestions = dueQuestions,
-                    totalRecentDecks = uiState.recentDecks.size
+                    totalRecentDecks = uiState.recentDecks.size,
+                    onOpenAnalytics = onOpenAnalytics,
+                    onOpenSearch = onOpenSearch,
+                    onOpenDeckList = onOpenDeckList
                 )
                 RecentDeckSection(
                     recentDecks = uiState.recentDecks,
@@ -155,12 +167,12 @@ private fun HomeHeroSection(
     dueCards: Int,
     dueQuestions: Int,
     onStartReview: () -> Unit,
-    onOpenDeckList: () -> Unit
+    onOpenTodayPreview: () -> Unit
 ) {
     val spacing = LocalYikeSpacing.current
     val hasDueItems = dueQuestions > 0
-    val primaryActionText = if (hasDueItems) "开始复习" else "进入卡组"
-    val primaryAction = if (hasDueItems) onStartReview else onOpenDeckList
+    val primaryActionText = if (hasDueItems) "开始复习" else "今日预览"
+    val primaryAction = if (hasDueItems) onStartReview else onOpenTodayPreview
     YikeHeroCard(
         eyebrow = "Today Review",
         title = if (hasDueItems) "$dueQuestions 个问题待复习" else "今日暂无待复习",
@@ -189,8 +201,8 @@ private fun HomeHeroSection(
                 modifier = Modifier.weight(1f)
             )
             YikeSecondaryButton(
-                text = "浏览内容",
-                onClick = onOpenDeckList,
+                text = "今日预览",
+                onClick = onOpenTodayPreview,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -204,8 +216,12 @@ private fun HomeHeroSection(
 @Composable
 private fun HomeRhythmSection(
     dueQuestions: Int,
-    totalRecentDecks: Int
+    totalRecentDecks: Int,
+    onOpenAnalytics: () -> Unit,
+    onOpenSearch: () -> Unit,
+    onOpenDeckList: () -> Unit
 ) {
+    val spacing = LocalYikeSpacing.current
     YikeStateBanner(
         title = "今日节奏",
         description = if (dueQuestions <= 0) {
@@ -220,6 +236,23 @@ private fun HomeRhythmSection(
         }
     ) {
         YikeProgressBar(progress = if (dueQuestions <= 0) 1f else 0f)
+        Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
+            YikeSecondaryButton(
+                text = "复习统计",
+                onClick = onOpenAnalytics,
+                modifier = Modifier.weight(1f)
+            )
+            YikeSecondaryButton(
+                text = "问题检索",
+                onClick = onOpenSearch,
+                modifier = Modifier.weight(1f)
+            )
+            YikeSecondaryButton(
+                text = "浏览卡组",
+                onClick = onOpenDeckList,
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 }
 
