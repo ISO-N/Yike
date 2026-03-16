@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.kariscode.yike.core.coroutine.parallel3
 import com.kariscode.yike.core.message.ErrorMessages
 import com.kariscode.yike.core.time.TimeProvider
+import com.kariscode.yike.core.viewmodel.launchResult
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.domain.model.QuestionMasteryCalculator
 import com.kariscode.yike.domain.model.QuestionMasteryLevel
@@ -64,8 +65,8 @@ class QuestionSearchViewModel(
      */
     fun refresh() {
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-        viewModelScope.launch {
-            runCatching {
+        launchResult(
+            action = {
                 parallel3(
                     first = { studyInsightsRepository.listAvailableTags(limit = 8) },
                     second = {
@@ -74,7 +75,8 @@ class QuestionSearchViewModel(
                     },
                     third = { loadCardsForDeck(_uiState.value.selectedDeckId) }
                 )
-            }.onSuccess { (tags, decks, cards) ->
+            },
+            onSuccess = { (tags, decks, cards) ->
                 val preservedCardId = _uiState.value.selectedCardId?.takeIf { selectedId ->
                     cards.any { card -> card.id == selectedId }
                 }
@@ -89,7 +91,8 @@ class QuestionSearchViewModel(
                     )
                 }
                 search()
-            }.onFailure { throwable ->
+            },
+            onFailure = { throwable ->
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -97,7 +100,7 @@ class QuestionSearchViewModel(
                     )
                 }
             }
-        }
+        )
     }
 
     /**
@@ -176,10 +179,10 @@ class QuestionSearchViewModel(
      */
     private fun search() {
         searchJob?.cancel()
-        searchJob = viewModelScope.launch {
+        searchJob = launchResult(
+            action = {
             val snapshot = _uiState.value
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            runCatching {
                 val now = timeProvider.nowEpochMillis()
                 studyInsightsRepository.searchQuestionContexts(
                     filters = QuestionQueryFilters(
@@ -197,7 +200,8 @@ class QuestionSearchViewModel(
                         isDue = context.question.status == QuestionStatus.ACTIVE && context.question.dueAt <= now
                     )
                 }
-            }.onSuccess { results ->
+            },
+            onSuccess = { results ->
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -205,7 +209,8 @@ class QuestionSearchViewModel(
                         errorMessage = null
                     )
                 }
-            }.onFailure { throwable ->
+            },
+            onFailure = { throwable ->
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -214,7 +219,7 @@ class QuestionSearchViewModel(
                     )
                 }
             }
-        }
+        )
     }
 
     /**

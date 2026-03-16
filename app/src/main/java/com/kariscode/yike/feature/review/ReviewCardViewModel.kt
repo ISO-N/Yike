@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.kariscode.yike.core.coroutine.parallel
 import com.kariscode.yike.core.message.ErrorMessages
 import com.kariscode.yike.core.time.TimeProvider
+import com.kariscode.yike.core.viewmodel.launchResult
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.domain.model.ReviewRating
 import com.kariscode.yike.domain.repository.CardRepository
@@ -108,42 +109,44 @@ class ReviewCardViewModel(
                 exitConfirmationVisible = false
             )
         }
-        viewModelScope.launch {
-            runCatching {
+        launchResult(
+            action = {
                 val now = timeProvider.nowEpochMillis()
-                val (card, dueQuestions) = parallel(
+                parallel(
                     first = { cardRepository.findById(cardId) ?: error(ErrorMessages.CARD_NOT_FOUND) },
                     second = { reviewRepository.listDueQuestionsByCard(cardId = cardId, nowEpochMillis = now) }
                 )
-                card.title to dueQuestions
-            }.onSuccess { (cardTitle, dueQuestions) ->
+            },
+            onSuccess = { (card, dueQuestions) ->
+                val cardTitle = card.title
                 if (dueQuestions.isEmpty()) {
                     _effects.tryEmit(ReviewCardEffect.NavigateToQueue)
-                    return@onSuccess
+                } else {
+                    pendingQuestions = dueQuestions.map { question ->
+                        ReviewQuestionUiModel(
+                            questionId = question.id,
+                            prompt = question.prompt,
+                            answerText = question.answer.ifBlank { "无答案" },
+                            stageIndex = question.stageIndex
+                        )
+                    }
+                    questionPresentedAtEpochMillis = timeProvider.nowEpochMillis()
+                    _uiState.update {
+                        it.copy(
+                            cardTitle = cardTitle,
+                            isLoading = false,
+                            totalCount = pendingQuestions.size,
+                            completedCount = 0,
+                            currentQuestion = pendingQuestions.firstOrNull(),
+                            answerVisible = false,
+                            isSubmitting = false,
+                            isCompleted = false,
+                            errorMessage = null
+                        )
+                    }
                 }
-                pendingQuestions = dueQuestions.map { question ->
-                    ReviewQuestionUiModel(
-                        questionId = question.id,
-                        prompt = question.prompt,
-                        answerText = question.answer.ifBlank { "无答案" },
-                        stageIndex = question.stageIndex
-                    )
-                }
-                questionPresentedAtEpochMillis = timeProvider.nowEpochMillis()
-                _uiState.update {
-                    it.copy(
-                        cardTitle = cardTitle,
-                        isLoading = false,
-                        totalCount = pendingQuestions.size,
-                        completedCount = 0,
-                        currentQuestion = pendingQuestions.firstOrNull(),
-                        answerVisible = false,
-                        isSubmitting = false,
-                        isCompleted = false,
-                        errorMessage = null
-                    )
-                }
-            }.onFailure {
+            },
+            onFailure = {
                 _uiState.update { state ->
                     state.copy(
                         isLoading = false,
@@ -151,7 +154,7 @@ class ReviewCardViewModel(
                     )
                 }
             }
-        }
+        )
     }
 
     /**
@@ -170,8 +173,8 @@ class ReviewCardViewModel(
         if (!_uiState.value.answerVisible || _uiState.value.isSubmitting) return
 
         _uiState.update { it.copy(isSubmitting = true, errorMessage = null) }
-        viewModelScope.launch {
-            runCatching {
+        launchResult(
+            action = {
                 val reviewedAt = timeProvider.nowEpochMillis()
                 reviewRepository.submitRating(
                     questionId = currentQuestion.questionId,
@@ -179,7 +182,8 @@ class ReviewCardViewModel(
                     reviewedAtEpochMillis = reviewedAt,
                     responseTimeMs = (reviewedAt - questionPresentedAtEpochMillis).coerceAtLeast(0L)
                 )
-            }.onSuccess {
+            },
+            onSuccess = {
                 val nextCompletedCount = _uiState.value.completedCount + 1
                 pendingQuestions = pendingQuestions.drop(1)
                 if (pendingQuestions.isEmpty()) {
@@ -205,7 +209,8 @@ class ReviewCardViewModel(
                         )
                     }
                 }
-            }.onFailure {
+            },
+            onFailure = {
                 _uiState.update { state ->
                     state.copy(
                         isSubmitting = false,
@@ -213,7 +218,7 @@ class ReviewCardViewModel(
                     )
                 }
             }
-        }
+        )
     }
 
     /**

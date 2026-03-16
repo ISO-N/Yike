@@ -7,6 +7,7 @@ import com.kariscode.yike.core.coroutine.parallel
 import com.kariscode.yike.core.id.EntityIds
 import com.kariscode.yike.core.message.ErrorMessages
 import com.kariscode.yike.core.message.SuccessMessages
+import com.kariscode.yike.core.viewmodel.launchResult
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.core.time.TimeProvider
 import com.kariscode.yike.domain.model.Card
@@ -148,16 +149,16 @@ class QuestionEditorViewModel(
             return
         }
 
-        viewModelScope.launch {
-            val card = loadedCard
-            if (card == null) {
-                _uiState.update { it.copy(errorMessage = ErrorMessages.CARD_NOT_FOUND) }
-                return@launch
-            }
+        val card = loadedCard
+        if (card == null) {
+            _uiState.update { it.copy(errorMessage = ErrorMessages.CARD_NOT_FOUND) }
+            return
+        }
 
-            _uiState.update { it.copy(isSaving = true, errorMessage = null, message = null) }
+        _uiState.update { it.copy(isSaving = true, errorMessage = null, message = null) }
 
-            runCatching {
+        launchResult(
+            action = {
                 val now = timeProvider.nowEpochMillis()
                 val settings = appSettingsRepository.getSettings()
                 val initialDueAt = InitialDueAtCalculator.compute(
@@ -186,9 +187,11 @@ class QuestionEditorViewModel(
                 questionRepository.deleteAll(deletedQuestionIds)
                 deletedQuestionIds.clear()
                 reloadFromStorage()
-            }.onSuccess {
+            },
+            onSuccess = {
                 _uiState.update { it.copy(isSaving = false, hasUnsavedChanges = false, message = SuccessMessages.SAVED) }
-            }.onFailure {
+            },
+            onFailure = {
                 _uiState.update {
                     it.copy(
                         isSaving = false,
@@ -197,7 +200,7 @@ class QuestionEditorViewModel(
                     )
                 }
             }
-        }
+        )
     }
 
     /**
