@@ -14,6 +14,7 @@ import com.kariscode.yike.data.repository.OfflineCardRepository
 import com.kariscode.yike.data.repository.OfflineDeckRepository
 import com.kariscode.yike.data.repository.OfflineQuestionRepository
 import com.kariscode.yike.data.repository.OfflineReviewRepository
+import com.kariscode.yike.data.repository.OfflineStudyInsightsRepository
 import com.kariscode.yike.data.reminder.NotificationHelper
 import com.kariscode.yike.data.reminder.ReminderScheduler
 import com.kariscode.yike.data.settings.DataStoreAppSettingsRepository
@@ -23,6 +24,7 @@ import com.kariscode.yike.domain.repository.CardRepository
 import com.kariscode.yike.domain.repository.DeckRepository
 import com.kariscode.yike.domain.repository.QuestionRepository
 import com.kariscode.yike.domain.repository.ReviewRepository
+import com.kariscode.yike.domain.repository.StudyInsightsRepository
 import com.kariscode.yike.domain.scheduler.ReviewSchedulerV1
 
 /**
@@ -85,6 +87,18 @@ class AppContainer(
 
     val questionRepository: QuestionRepository by lazy {
         OfflineQuestionRepository(questionDao = database.questionDao(), dispatchers = dispatchers)
+    }
+
+    /**
+     * 洞察仓储独立装配后，统计、预览和搜索页面就能共享同一套聚合查询，
+     * 不必在多个 ViewModel 中重复组合 DAO。
+     */
+    val studyInsightsRepository: StudyInsightsRepository by lazy {
+        OfflineStudyInsightsRepository(
+            questionDao = database.questionDao(),
+            reviewRecordDao = database.reviewRecordDao(),
+            dispatchers = dispatchers
+        )
     }
 
     /**
