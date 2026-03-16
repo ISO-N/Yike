@@ -2,9 +2,12 @@ package com.kariscode.yike.feature.debug
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +51,7 @@ fun DebugScreen(
         DebugContent(
             uiState = uiState,
             onGenerate = viewModel::generateRandomData,
+            onClear = viewModel::clearDebugData,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
@@ -62,6 +66,7 @@ fun DebugScreen(
 private fun DebugContent(
     uiState: DebugUiState,
     onGenerate: () -> Unit,
+    onClear: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -70,8 +75,24 @@ private fun DebugContent(
     ) {
         Text("默认会生成 2 个卡组，每个卡组 3-5 张卡片，每张卡片 2-3 个问题。")
         Text("至少 20% 的问题会在今天到期，方便直接验证首页统计与复习入口。")
-        Button(onClick = onGenerate, enabled = !uiState.isGenerating) {
-            Text(if (uiState.isGenerating) "生成中…" else "生成随机数据")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Button(
+                onClick = onGenerate,
+                enabled = !uiState.isGenerating && !uiState.isClearing,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(if (uiState.isGenerating) "生成中…" else "生成随机数据")
+            }
+            OutlinedButton(
+                onClick = onClear,
+                enabled = !uiState.isGenerating && !uiState.isClearing,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(if (uiState.isClearing) "清除中…" else "清除数据")
+            }
         }
         Text(uiState.statusMessage)
         if (uiState.createdQuestionCount > 0) {

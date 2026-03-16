@@ -6,6 +6,7 @@ package com.kariscode.yike.feature.debug
  */
 data class DebugUiState(
     val isGenerating: Boolean = false,
+    val isClearing: Boolean = false,
     val statusMessage: String = "准备生成随机测试数据。",
     val createdDeckCount: Int = 0,
     val createdCardCount: Int = 0,

@@ -73,7 +73,7 @@ class DebugViewModel(
      * 生成入口显式锁定并发点击，目的是防止开发中重复触发导致一次操作写入多份测试数据。
      */
     fun generateRandomData() {
-        if (_uiState.value.isGenerating) return
+        if (_uiState.value.isGenerating || _uiState.value.isClearing) return
 
         _uiState.update {
             it.copy(
@@ -90,6 +90,7 @@ class DebugViewModel(
                 _uiState.update {
                     it.copy(
                         isGenerating = false,
+                        isClearing = false,
                         statusMessage = "已生成 ${summary.deckCount} 个卡组、${summary.cardCount} 张卡片、${summary.questionCount} 个问题。",
                         createdDeckCount = summary.deckCount,
                         createdCardCount = summary.cardCount,
@@ -101,7 +102,50 @@ class DebugViewModel(
                 _uiState.update {
                     it.copy(
                         isGenerating = false,
+                        isClearing = false,
                         statusMessage = "生成失败，请检查日志后重试。",
+                        errorMessage = throwable.message ?: "未知错误"
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * 清除入口与造数入口互斥，是为了避免调试时一边写入一边清库导致数据库状态不可预测。
+     */
+    fun clearDebugData() {
+        if (_uiState.value.isGenerating || _uiState.value.isClearing) return
+
+        _uiState.update {
+            it.copy(
+                isClearing = true,
+                statusMessage = "正在清除调试数据…",
+                errorMessage = null
+            )
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                clearAllData()
+            }.onSuccess {
+                _uiState.update {
+                    it.copy(
+                        isGenerating = false,
+                        isClearing = false,
+                        statusMessage = "调试数据已清空，首页、题库和统计页现在会回到空状态。",
+                        createdDeckCount = 0,
+                        createdCardCount = 0,
+                        createdQuestionCount = 0,
+                        errorMessage = null
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isGenerating = false,
+                        isClearing = false,
+                        statusMessage = "清除失败，请稍后重试。",
                         errorMessage = throwable.message ?: "未知错误"
                     )
                 }
@@ -199,6 +243,18 @@ class DebugViewModel(
                 questionCount = questions.size
             )
         }
+
+    /**
+     * 按层级自底向上清空业务表，是为了让外键约束始终由数据库自然维护，而不是依赖调用侧猜测顺序。
+     */
+    private suspend fun clearAllData() = withContext(dispatchers.io) {
+        database.withTransaction {
+            database.reviewRecordDao().clearAll()
+            database.questionDao().clearAll()
+            database.cardDao().clearAll()
+            database.deckDao().clearAll()
+        }
+    }
 
     /**
      * 卡组命名带主题前缀是为了让生成后的测试数据更易辨认，避免开发者面对一批无语义的“示例1/示例2”。
