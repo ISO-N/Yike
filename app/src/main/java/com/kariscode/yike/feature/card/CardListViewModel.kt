@@ -3,6 +3,8 @@ package com.kariscode.yike.feature.card
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kariscode.yike.core.message.ErrorMessages
+import com.kariscode.yike.core.message.SuccessMessages
 import com.kariscode.yike.core.time.TimeProvider
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.domain.model.Card
@@ -106,7 +108,7 @@ class CardListViewModel(
                         it.copy(
                             isLoading = false,
                             message = null,
-                            errorMessage = throwable.message ?: "加载失败"
+                            errorMessage = throwable.message ?: ErrorMessages.LOAD_FAILED
                         )
                     }
                 }
@@ -171,15 +173,16 @@ class CardListViewModel(
         val editor = _uiState.value.editor ?: return
         val trimmedTitle = editor.title.trim()
         if (trimmedTitle.isBlank()) {
-            _uiState.update { it.copy(editor = editor.copy(validationMessage = "标题不能为空")) }
+            _uiState.update { it.copy(editor = editor.copy(validationMessage = ErrorMessages.TITLE_REQUIRED)) }
             return
         }
 
         viewModelScope.launch {
             runCatching {
                 val now = timeProvider.nowEpochMillis()
-                val existing = editor.cardId?.let { cardRepository.findById(it) }
-                val card = if (existing == null) {
+                // Room 的 upsert 会自动处理"不存在则插入，存在则更新"的逻辑
+                // 新建时无需先查询是否存在
+                val card = if (editor.cardId == null) {
                     Card(
                         id = "card_${UUID.randomUUID()}",
                         deckId = deckId,
@@ -191,17 +194,28 @@ class CardListViewModel(
                         updatedAt = now
                     )
                 } else {
-                    existing.copy(
+                    // 编辑模式需要查询现有数据以保留 createdAt 等字段
+                    val existing = cardRepository.findById(editor.cardId)
+                    existing?.copy(
                         title = trimmedTitle,
                         description = editor.description,
+                        updatedAt = now
+                    ) ?: Card(
+                        id = "card_${UUID.randomUUID()}",
+                        deckId = deckId,
+                        title = trimmedTitle,
+                        description = editor.description,
+                        archived = false,
+                        sortOrder = 0,
+                        createdAt = now,
                         updatedAt = now
                     )
                 }
                 cardRepository.upsert(card)
             }.onSuccess {
-                _uiState.update { it.copy(editor = null, message = "卡片已保存", errorMessage = null) }
+                _uiState.update { it.copy(editor = null, message = SuccessMessages.SAVED, errorMessage = null) }
             }.onFailure {
-                _uiState.update { it.copy(message = null, errorMessage = "卡片保存失败，请稍后重试") }
+                _uiState.update { it.copy(message = null, errorMessage = ErrorMessages.SAVE_FAILED) }
             }
         }
     }
@@ -210,7 +224,7 @@ class CardListViewModel(
      * 归档用于默认列表过滤，以降低误删风险并保持内容可恢复。
      */
     fun onArchiveCardClick(item: CardSummary) {
-        executeMutation(errorMessage = "卡片状态更新失败，请稍后重试") {
+        executeMutation(errorMessage = ErrorMessages.UPDATE_FAILED) {
             val now = timeProvider.nowEpochMillis()
             cardRepository.setArchived(cardId = item.card.id, archived = !item.card.archived, updatedAt = now)
         }
@@ -235,9 +249,9 @@ class CardListViewModel(
      */
     fun onConfirmDelete() {
         val pending = _uiState.value.pendingDelete ?: return
-        executeMutation(errorMessage = "卡片删除失败，请稍后重试") {
+        executeMutation(errorMessage = ErrorMessages.DELETE_FAILED) {
             cardRepository.delete(pending.card.id)
-            _uiState.update { it.copy(pendingDelete = null, message = "卡片已删除", errorMessage = null) }
+            _uiState.update { it.copy(pendingDelete = null, message = SuccessMessages.DELETED, errorMessage = null) }
         }
     }
 

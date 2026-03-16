@@ -3,6 +3,7 @@ package com.kariscode.yike.feature.editor
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kariscode.yike.core.message.ErrorMessages
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.core.time.TimeProvider
 import com.kariscode.yike.domain.model.Card
@@ -135,13 +136,13 @@ class QuestionEditorViewModel(
         val state = _uiState.value
         val trimmedTitle = state.title.trim()
         if (trimmedTitle.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "卡片标题不能为空") }
+            _uiState.update { it.copy(errorMessage = ErrorMessages.TITLE_REQUIRED) }
             return
         }
 
         val withPromptValidation = state.questions.map { draft ->
             val trimmedPrompt = draft.prompt.trim()
-            if (trimmedPrompt.isBlank()) draft.copy(validationMessage = "题面不能为空") else draft
+            if (trimmedPrompt.isBlank()) draft.copy(validationMessage = ErrorMessages.QUESTION_CONTENT_REQUIRED) else draft
         }
         if (withPromptValidation.any { it.validationMessage != null }) {
             _uiState.update { it.copy(questions = withPromptValidation, errorMessage = "请修正校验错误后再保存") }
