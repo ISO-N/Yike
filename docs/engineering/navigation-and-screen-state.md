@@ -206,6 +206,7 @@ error: HomeError?
 ### 8.1 页面职责
 
 - 展示全部卡组
+- 支持按名称或说明查找卡组
 - 支持新建、编辑、归档/删除
 
 ### 8.2 `DeckListUiState` 建议
@@ -229,6 +230,7 @@ error: DeckListError?
 ### 8.4 关键事件
 
 - `OnCreateDeckClick`
+- `OnKeywordChange`
 - `OnDeckNameChange`
 - `OnConfirmCreateDeck`
 - `OnDeckClick(deckId)`
