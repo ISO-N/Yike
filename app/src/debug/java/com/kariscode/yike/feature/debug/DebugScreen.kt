@@ -14,8 +14,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kariscode.yike.app.LocalAppContainer
-import com.kariscode.yike.ui.component.NavigationAction
 import com.kariscode.yike.ui.component.YikeTopAppBar
+import com.kariscode.yike.ui.component.backNavigationAction
 
 /**
  * 调试页独立成屏幕，是为了把“快速造数”与正式用户路径彻底分离，
@@ -40,7 +40,7 @@ fun DebugScreen(
         topBar = {
             YikeTopAppBar(
                 title = "调试工具",
-                navigationAction = NavigationAction(label = "返回", onClick = onBack)
+                navigationAction = backNavigationAction(onBack)
             )
         },
         modifier = modifier

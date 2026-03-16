@@ -31,6 +31,7 @@ import com.kariscode.yike.ui.component.YikeSecondaryButton
 import com.kariscode.yike.ui.component.YikeStateBanner
 import com.kariscode.yike.ui.component.YikeSurfaceCard
 import com.kariscode.yike.ui.theme.LocalYikeSpacing
+import com.kariscode.yike.ui.component.backNavigationAction
 
 /**
  * 复习页需要保持聚焦节奏，因此仍使用流内导航壳，并把退出动作收敛到顶部栏和返回键确认。
@@ -67,7 +68,10 @@ fun ReviewCardScreen(
     YikeFlowScaffold(
         title = uiState.cardTitle.ifBlank { "复习" },
         subtitle = buildReviewSubtitle(uiState),
-        navigationAction = NavigationAction(label = "退", onClick = viewModel::onExitAttempt)
+        navigationAction = backNavigationAction(
+            onClick = viewModel::onExitAttempt,
+            contentDescription = "退出复习"
+        )
     ) { padding ->
         ReviewCardContent(
             uiState = uiState,

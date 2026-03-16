@@ -1,6 +1,9 @@
 package com.kariscode.yike.ui.component
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
@@ -39,8 +42,13 @@ fun YikeTopAppBar(
         },
         navigationIcon = {
             if (navigationAction != null) {
-                IconButton(onClick = navigationAction.onClick) {
-                    Text(navigationAction.label)
+                IconButton(
+                    onClick = navigationAction.onClick
+                ) {
+                    Icon(
+                        imageVector = navigationAction.icon,
+                        contentDescription = navigationAction.contentDescription
+                    )
                 }
             }
         },
@@ -59,14 +67,20 @@ fun YikeTopAppBar(
  * 避免以后出现同一页面用图标、另一页面用文字导致交互不统一。
  */
 data class NavigationAction(
-    val label: String,
+    val contentDescription: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.AutoMirrored.Filled.ArrowBack,
     val onClick: () -> Unit
 )
 
 /**
- * 统一返回动作的文案与建模方式，是为了让各页面不用重复拼装相同的导航对象，
- * 并把“聚焦流页面默认使用文字返回”这个约定固定在一个位置维护。
+ * 统一返回动作的图标与语义，是为了让各页面共享一致的顶部返回体验，
+ * 同时保留可访问的描述文本而不是退化成单个汉字按钮。
  */
-fun backNavigationAction(onClick: () -> Unit): NavigationAction =
-    NavigationAction(label = "返", onClick = onClick)
+fun backNavigationAction(
+    onClick: () -> Unit,
+    contentDescription: String = "返回"
+): NavigationAction = NavigationAction(
+    contentDescription = contentDescription,
+    onClick = onClick
+)
 

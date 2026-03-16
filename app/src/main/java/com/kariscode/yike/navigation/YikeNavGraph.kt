@@ -56,10 +56,10 @@ fun YikeNavGraph(
             navController = navController,
             startDestination = YikeDestination.HOME,
             modifier = Modifier.fillMaxSize(),
-            enterTransition = { primaryDestinationEnterTransition() },
-            exitTransition = { primaryDestinationExitTransition() },
-            popEnterTransition = { primaryDestinationEnterTransition() },
-            popExitTransition = { primaryDestinationExitTransition() }
+            enterTransition = { appEnterTransition() },
+            exitTransition = { appExitTransition() },
+            popEnterTransition = { appPopEnterTransition() },
+            popExitTransition = { appPopExitTransition() }
         ) {
             composable(route = YikeDestination.HOME) {
                 HomeScreen(
@@ -293,4 +293,65 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.primaryDestination
         towards = direction,
         animationSpec = tween(durationMillis = 380)
     ) + fadeOut(animationSpec = tween(durationMillis = 280))
+}
+
+/**
+ * 应用级进入动画统一先判断是否为一级入口切换，若不是则回退到流内页面的轻量横向推进，
+ * 这样既保留主导航的桌面式空间感，也让编辑、预览、统计和搜索页面不再像“瞬间硬切”。
+ */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.appEnterTransition(): EnterTransition {
+    val initialOrder = primaryDestinationOrder(initialState.destination.route)
+    val targetOrder = primaryDestinationOrder(targetState.destination.route)
+    if (initialOrder != null && targetOrder != null) {
+        return primaryDestinationEnterTransition()
+    }
+    return slideIntoContainer(
+        towards = AnimatedContentTransitionScope.SlideDirection.Left,
+        animationSpec = tween(durationMillis = 300)
+    ) + fadeIn(animationSpec = tween(durationMillis = 220))
+}
+
+/**
+ * 普通 push 场景下的退出动画采用与进入同向的轻量推开，是为了让流内页面切换更接近原生任务流节奏。
+ */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.appExitTransition(): ExitTransition {
+    val initialOrder = primaryDestinationOrder(initialState.destination.route)
+    val targetOrder = primaryDestinationOrder(targetState.destination.route)
+    if (initialOrder != null && targetOrder != null) {
+        return primaryDestinationExitTransition()
+    }
+    return slideOutOfContainer(
+        towards = AnimatedContentTransitionScope.SlideDirection.Left,
+        animationSpec = tween(durationMillis = 300)
+    ) + fadeOut(animationSpec = tween(durationMillis = 220))
+}
+
+/**
+ * pop 进入动画与 push 方向镜像，是为了让用户在返回时获得明确的“回到上一层”空间反馈。
+ */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.appPopEnterTransition(): EnterTransition {
+    val initialOrder = primaryDestinationOrder(initialState.destination.route)
+    val targetOrder = primaryDestinationOrder(targetState.destination.route)
+    if (initialOrder != null && targetOrder != null) {
+        return primaryDestinationEnterTransition()
+    }
+    return slideIntoContainer(
+        towards = AnimatedContentTransitionScope.SlideDirection.Right,
+        animationSpec = tween(durationMillis = 300)
+    ) + fadeIn(animationSpec = tween(durationMillis = 220))
+}
+
+/**
+ * pop 退出动画与 pop 进入保持镜像，是为了让返回链路不再只剩淡出，而是具有稳定层级感。
+ */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.appPopExitTransition(): ExitTransition {
+    val initialOrder = primaryDestinationOrder(initialState.destination.route)
+    val targetOrder = primaryDestinationOrder(targetState.destination.route)
+    if (initialOrder != null && targetOrder != null) {
+        return primaryDestinationExitTransition()
+    }
+    return slideOutOfContainer(
+        towards = AnimatedContentTransitionScope.SlideDirection.Right,
+        animationSpec = tween(durationMillis = 300)
+    ) + fadeOut(animationSpec = tween(durationMillis = 220))
 }
