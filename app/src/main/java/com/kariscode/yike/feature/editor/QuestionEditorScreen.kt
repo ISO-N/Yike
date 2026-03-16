@@ -5,8 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,6 +18,7 @@ import com.kariscode.yike.ui.component.YikeBadge
 import com.kariscode.yike.ui.component.YikeFlowScaffold
 import com.kariscode.yike.ui.component.YikeHeaderBlock
 import com.kariscode.yike.ui.component.YikePrimaryButton
+import com.kariscode.yike.ui.component.YikeScrollableColumn
 import com.kariscode.yike.ui.component.YikeSecondaryButton
 import com.kariscode.yike.ui.component.YikeStateBanner
 import com.kariscode.yike.ui.component.YikeSurfaceCard
@@ -85,10 +84,7 @@ private fun QuestionEditorContent(
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalYikeSpacing.current
-    Column(
-        modifier = modifier.verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(spacing.lg)
-    ) {
+    YikeScrollableColumn(modifier = modifier) {
         when {
             uiState.isLoading -> {
                 YikeStateBanner(

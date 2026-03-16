@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,6 +26,7 @@ import com.kariscode.yike.ui.component.YikeOperationFeedback
 import com.kariscode.yike.ui.component.YikePrimaryButton
 import com.kariscode.yike.ui.component.YikePrimaryDestination
 import com.kariscode.yike.ui.component.YikePrimaryScaffold
+import com.kariscode.yike.ui.component.YikeScrollableColumn
 import com.kariscode.yike.ui.component.YikeSecondaryButton
 import com.kariscode.yike.ui.component.YikeDangerConfirmationDialog
 import com.kariscode.yike.ui.component.YikeStateBanner
@@ -102,11 +101,7 @@ private fun DeckListContent(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues()
 ) {
-    val spacing = LocalYikeSpacing.current
-    Column(
-        modifier = modifier.verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(spacing.lg)
-    ) {
+    YikeScrollableColumn(modifier = modifier) {
         DeckOverviewSection(items = uiState.items)
 
         when {
@@ -188,14 +183,13 @@ private fun DeckListContent(
  */
 @Composable
 private fun DeckOverviewSection(items: List<DeckSummary>) {
-    val spacing = LocalYikeSpacing.current
     val totalDue = items.sumOf { it.dueQuestionCount }
     YikeHeroCard(
         eyebrow = "Overview",
         title = "${items.size} 个活跃卡组",
         description = "今天到期的内容会优先显示在每个列表项上，方便你快速决定先维护哪里。"
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(spacing.md)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(LocalYikeSpacing.current.md)) {
             YikeMetricCard(
                 value = items.size.toString(),
                 label = "活跃卡组",

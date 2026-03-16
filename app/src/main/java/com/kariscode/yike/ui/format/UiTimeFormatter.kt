@@ -19,6 +19,9 @@ fun formatLocalDateTime(epochMillis: Long, zoneId: ZoneId = ZoneId.systemDefault
  * 统一管理 UI 展示用的日期时间格式化器。
  */
 object UiDateTimeFormatters {
+    /**
+     * 预览类页面刻意省去年份，是为了让移动端首屏优先承载“今天先做什么”而不是冗余时间上下文。
+     */
     val PREVIEW_DATE = DateTimeFormatter.ofPattern("M 月 d 日 HH:mm")
 }
 

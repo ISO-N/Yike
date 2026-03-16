@@ -5,8 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -26,6 +24,7 @@ import com.kariscode.yike.ui.component.YikeListItemCard
 import com.kariscode.yike.ui.component.YikeMetricCard
 import com.kariscode.yike.ui.component.YikeOperationFeedback
 import com.kariscode.yike.ui.component.YikePrimaryButton
+import com.kariscode.yike.ui.component.YikeScrollableColumn
 import com.kariscode.yike.ui.component.YikeSecondaryButton
 import com.kariscode.yike.ui.component.YikeDangerConfirmationDialog
 import com.kariscode.yike.ui.component.YikeStateBanner
@@ -102,11 +101,7 @@ private fun CardListContent(
     onConfirmDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val spacing = LocalYikeSpacing.current
-    Column(
-        modifier = modifier.verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(spacing.lg)
-    ) {
+    YikeScrollableColumn(modifier = modifier) {
         CardOverviewSection(
             items = uiState.items,
             onCreateCard = onCreateCard,
