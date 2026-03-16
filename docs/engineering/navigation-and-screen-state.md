@@ -207,7 +207,7 @@ error: HomeError?
 
 - 展示全部卡组
 - 支持按名称或说明查找卡组
-- 支持新建、编辑、归档/删除
+- 支持新建、编辑、归档
 
 ### 8.2 `DeckListUiState` 建议
 
@@ -443,7 +443,7 @@ error: ReviewError?
 ### 14.1 页面职责
 
 - 管理提醒设置
-- 提供回收站入口
+- 提供已归档内容入口
 - 提供备份恢复入口
 - 展示应用信息
 
@@ -463,12 +463,12 @@ error: SettingsError?
 - `OnReminderEnabledChange`
 - `OnReminderTimeClick`
 - `OnReminderTimeConfirmed`
-- `OnRecycleBinClick`
+- `OnArchivedContentClick`
 - `OnBackupRestoreClick`
 
 ---
 
-## 15. 回收站页 `RecycleBinScreen`
+## 15. 已归档内容页 `RecycleBinScreen`
 
 ### 15.1 页面职责
 
