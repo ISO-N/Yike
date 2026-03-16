@@ -40,6 +40,9 @@ class FeatureContentTest {
                     ),
                     onRetry = {},
                     onStartReview = {},
+                    onOpenTodayPreview = {},
+                    onOpenAnalytics = {},
+                    onOpenSearch = {},
                     onOpenDeckList = {},
                     onOpenSettings = {},
                     onOpenDebug = {}
@@ -67,6 +70,9 @@ class FeatureContentTest {
                     ),
                     onRetry = {},
                     onStartReview = {},
+                    onOpenTodayPreview = {},
+                    onOpenAnalytics = {},
+                    onOpenSearch = {},
                     onOpenDeckList = {},
                     onOpenSettings = {},
                     onOpenDebug = {}
@@ -94,6 +100,9 @@ class FeatureContentTest {
                     ),
                     onRetry = {},
                     onStartReview = {},
+                    onOpenTodayPreview = {},
+                    onOpenAnalytics = {},
+                    onOpenSearch = {},
                     onOpenDeckList = {},
                     onOpenSettings = {},
                     onOpenDebug = {}
@@ -122,6 +131,9 @@ class FeatureContentTest {
                     ),
                     onRetry = {},
                     onStartReview = {},
+                    onOpenTodayPreview = {},
+                    onOpenAnalytics = {},
+                    onOpenSearch = {},
                     onOpenDeckList = {},
                     onOpenSettings = {},
                     onOpenDebug = {}

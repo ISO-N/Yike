@@ -74,6 +74,39 @@ class YikeDatabaseIntegrationTest {
     }
 
     /**
+     * 搜索与今日预览共用的上下文查询必须同时返回层级名称并遵守 due 过滤，
+     * 否则页面会出现“能搜到题，但不知道它属于哪里”或“预览混入未到期题”的问题。
+     */
+    @Test
+    fun listQuestionContexts_supportsKeywordDeckAndDueFilters() = runBlocking {
+        database.deckDao().upsert(createDeck(id = "deck_math", archived = false))
+        database.deckDao().upsert(createDeck(id = "deck_os", archived = false))
+        database.cardDao().upsert(createCard(id = "card_limit", deckId = "deck_math", archived = false))
+        database.cardDao().upsert(createCard(id = "card_process", deckId = "deck_os", archived = false))
+        database.questionDao().upsertAll(
+            listOf(
+                createQuestion(id = "q_due", cardId = "card_limit", dueAt = 1_000L).copy(prompt = "极限定义是什么"),
+                createQuestion(id = "q_future", cardId = "card_limit", dueAt = 9_000L).copy(prompt = "极限有哪些性质"),
+                createQuestion(id = "q_other", cardId = "card_process", dueAt = 1_000L).copy(prompt = "进程状态有哪些")
+            )
+        )
+
+        val rows = database.questionDao().listQuestionContexts(
+            keyword = "极限",
+            tagKeyword = null,
+            status = QuestionEntity.STATUS_ACTIVE,
+            deckId = "deck_math",
+            cardId = null,
+            maxDueAt = 2_000L
+        )
+
+        assertEquals(1, rows.size)
+        assertEquals("deck_math", rows.first().deckId)
+        assertEquals("card_limit", rows.first().cardId)
+        assertEquals("极限定义是什么", rows.first().prompt)
+    }
+
+    /**
      * 评分事务必须同时更新 Question 与新增 ReviewRecord，
      * 否则用户会看到阶段变化了却没有复习历史的半成功状态。
      */
@@ -106,6 +139,37 @@ class YikeDatabaseIntegrationTest {
         assertEquals(1, updatedQuestion?.reviewCount)
         assertEquals(1, reviewRecords.size)
         assertEquals(submission.reviewRecord.id, reviewRecords.first().id)
+    }
+
+    /**
+     * 统计页依赖评分分布与卡组拆分聚合，必须验证 AGAIN 比例和平均耗时不会在数据库层被算错。
+     */
+    @Test
+    fun reviewAnalytics_aggregatesDistributionAndDeckBreakdown() = runBlocking {
+        database.deckDao().upsert(createDeck(id = "deck_math", archived = false))
+        database.cardDao().upsert(createCard(id = "card_limit", deckId = "deck_math", archived = false))
+        database.questionDao().upsertAll(
+            listOf(
+                createQuestion(id = "q_1", cardId = "card_limit", dueAt = 1_000L),
+                createQuestion(id = "q_2", cardId = "card_limit", dueAt = 1_000L)
+            )
+        )
+        database.reviewRecordDao().insertAll(
+            listOf(
+                createReviewRecord(id = "rr_1", questionId = "q_1", rating = ReviewRating.AGAIN, reviewedAt = 3_000L, responseTimeMs = 900L),
+                createReviewRecord(id = "rr_2", questionId = "q_2", rating = ReviewRating.GOOD, reviewedAt = 4_000L, responseTimeMs = 1_500L)
+            )
+        )
+
+        val summary = database.reviewRecordDao().getReviewAnalytics(startEpochMillis = null)
+        val deckBreakdowns = database.reviewRecordDao().listDeckReviewAnalytics(startEpochMillis = null)
+
+        assertEquals(2, summary.totalReviews)
+        assertEquals(1, summary.againCount)
+        assertEquals(1, summary.goodCount)
+        assertEquals(1, deckBreakdowns.size)
+        assertEquals("deck_math", deckBreakdowns.first().deckId)
+        assertEquals(1, deckBreakdowns.first().againCount)
     }
 
     /**
@@ -186,5 +250,27 @@ class YikeDatabaseIntegrationTest {
         lapseCount = 0,
         createdAt = 1L,
         updatedAt = 1L
+    )
+
+    /**
+     * 复习记录辅助构造函数显式保留评分与耗时字段，是为了让统计聚合测试聚焦在查询口径本身。
+     */
+    private fun createReviewRecord(
+        id: String,
+        questionId: String,
+        rating: ReviewRating,
+        reviewedAt: Long,
+        responseTimeMs: Long
+    ): ReviewRecordEntity = ReviewRecordEntity(
+        id = id,
+        questionId = questionId,
+        rating = rating.name,
+        oldStageIndex = 0,
+        newStageIndex = 1,
+        oldDueAt = 1_000L,
+        newDueAt = 2_000L,
+        reviewedAt = reviewedAt,
+        responseTimeMs = responseTimeMs,
+        note = ""
     )
 }
