@@ -260,7 +260,7 @@ private fun ReminderSettingsSection(
     YikeListItemCard(
         title = "局域网同步",
         summary = "发现同一 Wi-Fi 下的设备",
-        supporting = "支持配对、双向增量预览与冲突确认。"
+        supporting = "支持设备配对、同步预览与冲突确认。"
     ) {
         YikeSecondaryButton(
             text = "进入同步页",

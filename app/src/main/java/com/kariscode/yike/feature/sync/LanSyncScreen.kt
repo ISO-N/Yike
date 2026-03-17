@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
@@ -42,7 +44,7 @@ import com.kariscode.yike.ui.component.YikeWarningCard
 import com.kariscode.yike.ui.component.backNavigationAction
 
 /**
- * LAN Sync V2 页面独立成高风险流程页，是为了把配对、冲突和双向同步这些全局操作与普通设置项隔离开。
+ * 局域网同步页独立成高风险流程页，是为了把配对、预览和冲突确认这些全局操作与普通设置项隔离开。
  */
 @Composable
 fun LanSyncScreen(
@@ -81,8 +83,8 @@ fun LanSyncScreen(
     }
 
     YikeFlowScaffold(
-        title = "局域网同步 V2",
-        subtitle = "在同一 Wi-Fi 下发现设备，配对后执行双向增量同步。",
+        title = "局域网同步",
+        subtitle = "在同一 Wi-Fi 下发现设备，配对后同步学习数据。",
         navigationAction = backNavigationAction(onClick = onBack)
     ) { padding ->
         LanSyncContent(
@@ -155,10 +157,17 @@ private fun LanSyncContent(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues()
 ) {
-    YikeScrollableColumn(modifier = modifier) {
+    YikeScrollableColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(
+                top = contentPadding.calculateTopPadding(),
+                bottom = contentPadding.calculateBottomPadding()
+            )
+    ) {
         YikeWarningCard(
-            title = "双向增量同步",
-            description = "首次连接需要输入对方配对码；真正开始传输前会先生成预览，并在有冲突时要求明确决议。"
+            title = "同步前先确认",
+            description = "首次连接需要输入对方配对码；开始同步前会先显示本次变化，如果同一内容两台设备都改过，会要求你确认保留哪一边。"
         )
 
         LocalProfileSection(
@@ -187,7 +196,6 @@ private fun LanSyncContent(
             successTitle = "同步成功",
             errorTitle = "同步失败"
         )
-        Spacer(modifier = Modifier.height(contentPadding.calculateBottomPadding()))
     }
 }
 
@@ -240,7 +248,7 @@ private fun SessionSection(
         !uiState.session.isSessionActive -> {
             YikeStateBanner(
                 title = "同步尚未启动",
-                description = "开始会话后，本机会广播自身并持续发现同一 Wi-Fi 下支持 LAN Sync V2 的设备。"
+                description = "开始会话后，本机会广播自身并持续发现同一 Wi-Fi 下可同步的设备。"
             ) {
                 YikePrimaryButton(
                     text = "开始发现设备",
@@ -295,7 +303,7 @@ private fun DeviceListSection(
         !isSessionActive -> {
             YikeStateBanner(
                 title = "等待开始发现",
-                description = "会话启动后，这里会显示同一局域网内支持 LAN Sync V2 的设备。"
+                description = "会话启动后，这里会显示同一局域网内可同步的设备。"
             )
         }
 
@@ -317,7 +325,7 @@ private fun DeviceListSection(
                         text = if (peer.trustState == com.kariscode.yike.domain.model.LanSyncTrustState.UNTRUSTED) {
                             "输入配对码"
                         } else {
-                            "预览同步"
+                            "查看同步内容"
                         },
                         onClick = { onPeerClick(peer) },
                         modifier = Modifier.fillMaxWidth()
