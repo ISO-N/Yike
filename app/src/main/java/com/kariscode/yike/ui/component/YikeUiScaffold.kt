@@ -57,10 +57,6 @@ import com.kariscode.yike.ui.theme.LocalYikeSpacing
 import com.kariscode.yike.ui.theme.YikeBestContainer
 import com.kariscode.yike.ui.theme.YikeCriticalContainer
 import com.kariscode.yike.ui.theme.YikeSuccessContainer
-import com.kariscode.yike.ui.theme.YikeSurfaceContainerHigh
-import com.kariscode.yike.ui.theme.YikeSurfaceContainerHighest
-import com.kariscode.yike.ui.theme.YikeSurfaceTint
-import com.kariscode.yike.ui.theme.YikeTextMuted
 import com.kariscode.yike.ui.theme.YikeWarningContainer
 
 /**
@@ -384,7 +380,7 @@ fun YikeStateBanner(
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        color = YikeSurfaceContainerHigh,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 2.dp
     ) {
         Column(
@@ -460,7 +456,7 @@ fun YikeWarningCard(
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        color = YikeWarningContainer
+        color = MaterialTheme.colorScheme.tertiaryContainer
     ) {
         Column(
             modifier = Modifier
@@ -524,19 +520,19 @@ fun YikeMetricCard(
 fun YikeBadge(
     text: String,
     modifier: Modifier = Modifier,
-    containerColor: Color = YikeSurfaceContainerHighest,
-    contentColor: Color = YikeTextMuted
+    containerColor: Color? = null,
+    contentColor: Color? = null
 ) {
     Surface(
         modifier = modifier,
         shape = CircleShape,
-        color = containerColor
+        color = containerColor ?: MaterialTheme.colorScheme.surfaceContainerHighest
     ) {
         Text(
             text = text,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             style = MaterialTheme.typography.labelMedium,
-            color = contentColor
+            color = contentColor ?: MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -732,7 +728,7 @@ fun YikeProgressBar(
             .fillMaxWidth()
             .height(6.dp)
             .clip(CircleShape)
-            .background(YikeSurfaceContainerHighest)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
     ) {
         Box(
             modifier = Modifier
@@ -787,7 +783,11 @@ private fun YikeBottomNavigation(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(18.dp),
                     colors = ButtonDefaults.textButtonColors(
-                        containerColor = if (selected) YikeSurfaceTint.copy(alpha = 0.28f) else Color.Transparent,
+                        containerColor = if (selected) {
+                            MaterialTheme.colorScheme.surfaceTint.copy(alpha = 0.28f)
+                        } else {
+                            Color.Transparent
+                        },
                         contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 ) {

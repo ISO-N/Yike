@@ -3,8 +3,13 @@ package com.kariscode.yike.app
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
+import com.kariscode.yike.data.settings.SettingsConstants
+import com.kariscode.yike.domain.model.AppSettings
+import com.kariscode.yike.domain.model.ThemeMode
 import com.kariscode.yike.navigation.YikeNavGraph
+import com.kariscode.yike.ui.theme.YikeTheme
 
 /**
  * 将导航与页面根节点集中在一个 Composable 中，可以让 Activity 保持“只负责承载”的职责，
@@ -16,10 +21,22 @@ fun YikeApp(
     modifier: Modifier = Modifier
 ) {
     val navController = rememberNavController()
-    CompositionLocalProvider(LocalAppContainer provides container) {
-        YikeNavGraph(
-            navController = navController,
-            modifier = modifier
+    val settings = container.appSettingsRepository.observeSettings().collectAsStateWithLifecycle(
+        initialValue = AppSettings(
+            dailyReminderEnabled = false,
+            dailyReminderHour = 20,
+            dailyReminderMinute = 0,
+            schemaVersion = SettingsConstants.SCHEMA_VERSION,
+            backupLastAt = null,
+            themeMode = ThemeMode.LIGHT
         )
+    )
+    YikeTheme(themeMode = settings.value.themeMode) {
+        CompositionLocalProvider(LocalAppContainer provides container) {
+            YikeNavGraph(
+                navController = navController,
+                modifier = modifier
+            )
+        }
     }
 }

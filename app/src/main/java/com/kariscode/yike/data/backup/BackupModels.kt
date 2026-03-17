@@ -1,5 +1,6 @@
 package com.kariscode.yike.data.backup
 
+import com.kariscode.yike.domain.model.ThemeMode
 import com.kariscode.yike.domain.scheduler.ReviewSchedulerV1
 import kotlinx.serialization.Serializable
 
@@ -35,7 +36,8 @@ data class BackupSettings(
     val dailyReminderEnabled: Boolean,
     val dailyReminderTime: String,
     val schemaVersion: Int,
-    val backupLastAt: String? = null
+    val backupLastAt: String? = null,
+    val themeMode: String = ThemeMode.LIGHT.storageValue
 )
 
 /**

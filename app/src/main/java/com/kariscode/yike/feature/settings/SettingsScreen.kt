@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,6 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kariscode.yike.BuildConfig
 import com.kariscode.yike.app.LocalAppContainer
+import com.kariscode.yike.domain.model.ThemeMode
 import com.kariscode.yike.ui.component.CollectFlowEffect
 import com.kariscode.yike.ui.component.YikeBadge
 import com.kariscode.yike.ui.component.YikeListItemCard
@@ -96,6 +100,7 @@ fun SettingsScreen(
                     true
                 ).show()
             },
+            onThemeModeChange = viewModel::onThemeModeChange,
             onOpenBackupRestore = viewModel::onBackupRestoreClick,
             onOpenRecycleBin = onOpenRecycleBin,
             modifier = modifier,
@@ -113,6 +118,7 @@ private fun SettingsContent(
     hasNotificationPermission: Boolean,
     onReminderEnabledChange: (Boolean) -> Unit,
     onChangeTime: () -> Unit,
+    onThemeModeChange: (ThemeMode) -> Unit,
     onOpenBackupRestore: () -> Unit,
     onOpenRecycleBin: () -> Unit,
     modifier: Modifier = Modifier,
@@ -144,6 +150,7 @@ private fun SettingsContent(
             hasNotificationPermission = hasNotificationPermission,
             onReminderEnabledChange = onReminderEnabledChange,
             onChangeTime = onChangeTime,
+            onThemeModeChange = onThemeModeChange,
             onOpenBackupRestore = onOpenBackupRestore,
             onOpenRecycleBin = onOpenRecycleBin
         )
@@ -189,6 +196,7 @@ private fun ReminderSettingsSection(
     hasNotificationPermission: Boolean,
     onReminderEnabledChange: (Boolean) -> Unit,
     onChangeTime: () -> Unit,
+    onThemeModeChange: (ThemeMode) -> Unit,
     onOpenBackupRestore: () -> Unit,
     onOpenRecycleBin: () -> Unit
 ) {
@@ -217,6 +225,17 @@ private fun ReminderSettingsSection(
             text = "修改时间",
             onClick = onChangeTime,
             modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    YikeListItemCard(
+        title = "显示主题",
+        summary = uiState.themeMode.displayLabel,
+        supporting = "切换后会立即作用到整个应用界面。"
+    ) {
+        ThemeModeFilterRow(
+            selectedMode = uiState.themeMode,
+            onThemeModeChange = onThemeModeChange
         )
     }
 
@@ -254,6 +273,31 @@ private fun ReminderSettingsSection(
             horizontalArrangement = Arrangement.spacedBy(LocalYikeSpacing.current.sm)
         ) {
             YikeBadge(text = "MVP")
+        }
+    }
+}
+
+/**
+ * 主题模式用横向芯片排列，是为了在手机宽度下同时保留三个明确选项，
+ * 避免下钻到二级页面才能完成一个低成本的外观偏好调整。
+ */
+@Composable
+private fun ThemeModeFilterRow(
+    selectedMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(LocalYikeSpacing.current.sm)
+    ) {
+        ThemeMode.entries.forEach { mode ->
+            FilterChip(
+                selected = selectedMode == mode,
+                onClick = { onThemeModeChange(mode) },
+                label = { Text(mode.displayLabel) }
+            )
         }
     }
 }

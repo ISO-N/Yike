@@ -1,6 +1,7 @@
 package com.kariscode.yike.domain.repository
 
 import com.kariscode.yike.domain.model.AppSettings
+import com.kariscode.yike.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -49,5 +50,11 @@ interface AppSettingsRepository {
      * 允许写入 null 是为了在用户清理数据或恢复失败时显式回退到“未知/未备份”状态。
      */
     suspend fun setBackupLastAt(epochMillis: Long?)
+
+    /**
+     * 主题模式单独暴露写入口，是为了让设置页调整显示策略时只表达业务意图，
+     * 而不必感知 DataStore 的具体 key 与序列化细节。
+     */
+    suspend fun setThemeMode(mode: ThemeMode)
 
 }

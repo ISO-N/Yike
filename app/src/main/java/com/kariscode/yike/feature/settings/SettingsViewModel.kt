@@ -10,6 +10,7 @@ import com.kariscode.yike.core.viewmodel.typedViewModelFactory
 import com.kariscode.yike.data.reminder.ReminderScheduler
 import com.kariscode.yike.data.settings.SettingsConstants
 import com.kariscode.yike.domain.model.AppSettings
+import com.kariscode.yike.domain.model.ThemeMode
 import com.kariscode.yike.domain.repository.AppSettingsRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +31,7 @@ data class SettingsUiState(
     val reminderHour: Int,
     val reminderMinute: Int,
     val lastBackupAt: Long?,
+    val themeMode: ThemeMode,
     val appVersionName: String,
     val message: String?,
     val errorMessage: String?
@@ -58,7 +60,8 @@ class SettingsViewModel(
         dailyReminderHour = 20,
         dailyReminderMinute = 0,
         schemaVersion = SettingsConstants.SCHEMA_VERSION,
-        backupLastAt = null
+        backupLastAt = null,
+        themeMode = ThemeMode.LIGHT
     )
 
     private val _uiState = MutableStateFlow(
@@ -68,6 +71,7 @@ class SettingsViewModel(
             reminderHour = 20,
             reminderMinute = 0,
             lastBackupAt = null,
+            themeMode = ThemeMode.LIGHT,
             appVersionName = appVersionName,
             message = null,
             errorMessage = null
@@ -92,6 +96,7 @@ class SettingsViewModel(
                         reminderHour = settings.dailyReminderHour,
                         reminderMinute = settings.dailyReminderMinute,
                         lastBackupAt = settings.backupLastAt,
+                        themeMode = settings.themeMode,
                         errorMessage = null
                     )
                 }
@@ -139,6 +144,19 @@ class SettingsViewModel(
      */
     fun onBackupRestoreClick() {
         _effects.tryEmit(SettingsEffect.OpenBackupRestore)
+    }
+
+    /**
+     * 主题切换只依赖设置仓储即可即时生效，是为了把“显示偏好”与提醒等系统副作用隔离开，
+     * 避免简单外观设置也走一遍无关的调度逻辑。
+     */
+    fun onThemeModeChange(themeMode: ThemeMode) {
+        if (themeMode == _uiState.value.themeMode) {
+            return
+        }
+        persistSettingsChange(successMessage = "主题设置已保存") {
+            appSettingsRepository.setThemeMode(themeMode)
+        }
     }
 
     /**

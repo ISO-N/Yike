@@ -22,6 +22,7 @@ import com.kariscode.yike.domain.model.AppSettings
 import com.kariscode.yike.domain.model.Question
 import com.kariscode.yike.domain.model.QuestionStatus
 import com.kariscode.yike.domain.model.ReviewRecord
+import com.kariscode.yike.domain.model.ThemeMode
 import com.kariscode.yike.domain.repository.AppSettingsRepository
 import com.kariscode.yike.domain.scheduler.ReviewSchedulerV1
 import java.io.FileNotFoundException
@@ -111,7 +112,8 @@ class BackupService(
                 dailyReminderEnabled = snapshot.settings.dailyReminderEnabled,
                 dailyReminderTime = snapshot.settings.toBackupReminderTime(),
                 schemaVersion = snapshot.settings.schemaVersion,
-                backupLastAt = snapshot.settings.backupLastAt?.let(BackupJson::formatEpochMillis)
+                backupLastAt = snapshot.settings.backupLastAt?.let(BackupJson::formatEpochMillis),
+                themeMode = snapshot.settings.themeMode.storageValue
             ),
             decks = snapshot.decks.map { deck -> deck.toBackup() },
             cards = snapshot.cards.map { card -> card.toBackup() },
@@ -179,7 +181,8 @@ class BackupService(
                 dailyReminderHour = hour,
                 dailyReminderMinute = minute,
                 schemaVersion = settings.schemaVersion,
-                backupLastAt = settings.backupLastAt?.let(BackupJson::parseEpochMillis)
+                backupLastAt = settings.backupLastAt?.let(BackupJson::parseEpochMillis),
+                themeMode = ThemeMode.fromStorageValue(settings.themeMode)
             )
         )
     }

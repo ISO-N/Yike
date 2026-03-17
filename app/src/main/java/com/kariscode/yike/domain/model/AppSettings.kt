@@ -9,6 +9,7 @@ data class AppSettings(
     val dailyReminderHour: Int,
     val dailyReminderMinute: Int,
     val schemaVersion: Int,
-    val backupLastAt: Long?
+    val backupLastAt: Long?,
+    val themeMode: ThemeMode = ThemeMode.LIGHT
 )
 

@@ -69,6 +69,21 @@ class BackupValidatorTest {
     }
 
     /**
+     * 非法主题模式必须在恢复前失败，
+     * 否则损坏备份会把设置仓储带入未知显示状态。
+     */
+    @Test
+    fun validate_invalidThemeMode_returnsFailure() {
+        val result = validator.validate(
+            createValidDocument().copy(
+                settings = createValidDocument().settings.copy(themeMode = "amoled")
+            )
+        )
+
+        assertTrue(result.isFailure)
+    }
+
+    /**
      * 用固定的最小合法样本构造文档，能让测试聚焦在校验规则而不是样板数据准备。
      */
     private fun createValidDocument(): BackupDocument = BackupDocument(
@@ -81,7 +96,8 @@ class BackupValidatorTest {
             dailyReminderEnabled = true,
             dailyReminderTime = "20:30",
             schemaVersion = 1,
-            backupLastAt = null
+            backupLastAt = null,
+            themeMode = "system"
         ),
         decks = listOf(
             BackupDeck(

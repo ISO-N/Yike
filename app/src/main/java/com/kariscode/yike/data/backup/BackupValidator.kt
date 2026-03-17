@@ -1,6 +1,7 @@
 package com.kariscode.yike.data.backup
 
 import com.kariscode.yike.core.time.TimeTextFormatter
+import com.kariscode.yike.domain.model.ThemeMode
 import com.kariscode.yike.domain.scheduler.ReviewSchedulerV1
 
 /**
@@ -19,6 +20,11 @@ class BackupValidator {
         BackupJson.parseEpochMillis(document.app.exportedAt)
         parseReminderTime(document.settings.dailyReminderTime)
         document.settings.backupLastAt?.let(BackupJson::parseEpochMillis)
+        require(
+            ThemeMode.entries.any { mode -> mode.storageValue == document.settings.themeMode }
+        ) {
+            "备份文件无效或版本不兼容"
+        }
 
         val deckIds = document.decks.map { deck ->
             require(deck.id.isNotBlank() && deck.name.isNotBlank()) { "备份文件无效或版本不兼容" }

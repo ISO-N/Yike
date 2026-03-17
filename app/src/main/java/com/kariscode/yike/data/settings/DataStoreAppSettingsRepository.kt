@@ -7,7 +7,9 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.kariscode.yike.domain.model.AppSettings
+import com.kariscode.yike.domain.model.ThemeMode
 import com.kariscode.yike.domain.repository.AppSettingsRepository
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
@@ -75,6 +77,7 @@ class DataStoreAppSettingsRepository(
             } else {
                 prefs[Keys.backupLastAt] = settings.backupLastAt
             }
+            prefs[Keys.themeMode] = settings.themeMode.storageValue
         }
     }
 
@@ -96,12 +99,21 @@ class DataStoreAppSettingsRepository(
         }
     }
 
+    /**
+     * 主题模式在仓储层统一转成稳定字符串，是为了让 DataStore 继续保持简单 key-value 结构，
+     * 同时不把枚举序列化策略泄漏给页面层。
+     */
+    override suspend fun setThemeMode(mode: ThemeMode) {
+        dataStore.edit { prefs -> prefs[Keys.themeMode] = mode.storageValue }
+    }
+
     private object Keys {
         val dailyReminderEnabled = booleanPreferencesKey("dailyReminderEnabled")
         val dailyReminderHour = intPreferencesKey("dailyReminderHour")
         val dailyReminderMinute = intPreferencesKey("dailyReminderMinute")
         val schemaVersion = intPreferencesKey("schemaVersion")
         val backupLastAt = longPreferencesKey("backupLastAt")
+        val themeMode = stringPreferencesKey("themeMode")
     }
 
     /**
@@ -112,7 +124,8 @@ class DataStoreAppSettingsRepository(
         dailyReminderHour = this[Keys.dailyReminderHour] ?: 20,
         dailyReminderMinute = this[Keys.dailyReminderMinute] ?: 0,
         schemaVersion = this[Keys.schemaVersion] ?: SettingsConstants.SCHEMA_VERSION,
-        backupLastAt = this[Keys.backupLastAt]
+        backupLastAt = this[Keys.backupLastAt],
+        themeMode = ThemeMode.fromStorageValue(this[Keys.themeMode])
     )
 
     /**

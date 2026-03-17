@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.kariscode.yike.ui.theme.YikeTheme
 
 /**
  * 以单 Activity 作为入口能把导航、依赖装配和系统初始化收敛到一个稳定边界，
@@ -15,10 +14,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            YikeTheme {
-                val container = (application as YikeApplication).container
-                YikeApp(container)
-            }
+            val container = (application as YikeApplication).container
+            YikeApp(container)
         }
     }
 }
