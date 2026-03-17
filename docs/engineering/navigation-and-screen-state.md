@@ -454,6 +454,7 @@ isLoading: Boolean
 dailyReminderEnabled: Boolean
 reminderHour: Int
 reminderMinute: Int
+themeMode: ThemeMode
 appVersionName: String
 error: SettingsError?
 ```
@@ -463,6 +464,7 @@ error: SettingsError?
 - `OnReminderEnabledChange`
 - `OnReminderTimeClick`
 - `OnReminderTimeConfirmed`
+- `OnThemeModeChange`
 - `OnArchivedContentClick`
 - `OnBackupRestoreClick`
 

@@ -46,6 +46,7 @@
 
 - 是否开启提醒
 - 固定提醒时间
+- 主题模式
 - 数据版本号
 - 最近备份时间（可选）
 
@@ -100,6 +101,7 @@
 
 - 是否开启提醒
 - 固定提醒时间
+- 主题模式
 - schemaVersion
 
 ---
@@ -145,7 +147,8 @@ yike-backup-20260314-213000.json
   "settings": {
     "dailyReminderEnabled": true,
     "dailyReminderTime": "20:30",
-    "schemaVersion": 2
+    "schemaVersion": 2,
+    "themeMode": "system"
   },
   "decks": [],
   "cards": [],
@@ -168,7 +171,8 @@ yike-backup-20260314-213000.json
   "settings": {
     "dailyReminderEnabled": true,
     "dailyReminderTime": "20:30",
-    "schemaVersion": 2
+    "schemaVersion": 2,
+    "themeMode": "system"
   },
   "decks": [
     {
@@ -438,6 +442,7 @@ yike-backup-20260314-213000.json
 
 - 导出支持空数据与非空数据集，并始终生成包含 `app/settings/decks/cards/questions/reviewRecords` 的 JSON 文件
 - `BackupDeck.intervalStepCount` 进入导出文件；恢复旧文件缺失该字段时默认回退到 8 段
+- `BackupSettings.themeMode` 进入导出文件；旧备份缺失该字段时默认回退到浅色模式
 - 恢复前先做版本、必填字段、引用关系、评分枚举和阶段合法性校验
 - 恢复采用全量覆盖；数据库写入在事务内完成，设置写入失败时会执行补偿回滚
 - 恢复完成后会根据恢复后的设置重新调度每日提醒

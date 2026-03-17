@@ -456,6 +456,13 @@ button {
   gap: var(--spacing-3);
 }
 
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .switch {
   width: 54px;
   height: 32px;
