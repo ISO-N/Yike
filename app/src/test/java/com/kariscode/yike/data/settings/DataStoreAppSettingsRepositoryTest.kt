@@ -1,6 +1,7 @@
 package com.kariscode.yike.data.settings
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import com.kariscode.yike.data.sync.FixedTimeProvider
 import com.kariscode.yike.domain.model.ThemeMode
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -26,7 +27,8 @@ class DataStoreAppSettingsRepositoryTest {
             dataStore = PreferenceDataStoreFactory.create(
                 scope = backgroundScope,
                 produceFile = { temporaryFolder.newFile("app-settings.preferences_pb") }
-            )
+            ),
+            timeProvider = FixedTimeProvider(now = 123L)
         )
 
         repository.setThemeMode(ThemeMode.DARK)

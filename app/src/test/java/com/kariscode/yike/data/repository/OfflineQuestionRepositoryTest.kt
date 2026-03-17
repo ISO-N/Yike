@@ -5,6 +5,8 @@ import com.kariscode.yike.data.local.db.dao.QuestionDao
 import com.kariscode.yike.data.local.db.dao.TodayReviewSummaryRow
 import com.kariscode.yike.data.local.db.dao.QuestionContextRow
 import com.kariscode.yike.data.local.db.entity.QuestionEntity
+import com.kariscode.yike.data.sync.FixedTimeProvider
+import com.kariscode.yike.data.sync.createTestSyncChangeRecorder
 import com.kariscode.yike.domain.model.Question
 import com.kariscode.yike.domain.model.QuestionStatus
 import kotlinx.coroutines.CoroutineDispatcher
@@ -41,7 +43,9 @@ class OfflineQuestionRepositoryTest {
                 override val main: CoroutineDispatcher = testDispatcher
                 override val io: CoroutineDispatcher = testDispatcher
                 override val default: CoroutineDispatcher = testDispatcher
-            }
+            },
+            timeProvider = FixedTimeProvider(now = 999L),
+            syncChangeRecorder = createTestSyncChangeRecorder()
         )
     }
 
@@ -499,6 +503,9 @@ class OfflineQuestionRepositoryTest {
             questionsByCardFlow
 
         override suspend fun listByCard(cardId: String): List<QuestionEntity> = listByCardResult
+
+        override suspend fun listByIds(questionIds: List<String>): List<QuestionEntity> =
+            questionIds.mapNotNull(storedQuestions::get)
 
         override suspend fun findById(questionId: String): QuestionEntity? =
             storedQuestions[questionId]

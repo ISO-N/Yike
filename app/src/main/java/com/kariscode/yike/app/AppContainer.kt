@@ -19,6 +19,10 @@ import com.kariscode.yike.data.reminder.NotificationHelper
 import com.kariscode.yike.data.reminder.ReminderScheduler
 import com.kariscode.yike.data.settings.DataStoreAppSettingsRepository
 import com.kariscode.yike.data.settings.appSettingsDataStore
+import com.kariscode.yike.data.sync.LanSyncChangeRecorder
+import com.kariscode.yike.data.sync.LanSyncCrypto
+import com.kariscode.yike.data.sync.LanSyncLocalProfileStore
+import com.kariscode.yike.data.sync.LanSyncPortAllocator
 import com.kariscode.yike.data.sync.LanSyncRepositoryImpl
 import com.kariscode.yike.domain.repository.AppSettingsRepository
 import com.kariscode.yike.domain.repository.CardRepository
@@ -69,6 +73,43 @@ class AppContainer(
     private val cardDao by lazy { database.cardDao() }
     private val questionDao by lazy { database.questionDao() }
     private val reviewRecordDao by lazy { database.reviewRecordDao() }
+    private val syncChangeDao by lazy { database.syncChangeDao() }
+    private val syncPeerDao by lazy { database.syncPeerDao() }
+    private val syncPeerCursorDao by lazy { database.syncPeerCursorDao() }
+
+    /**
+     * 同步加密能力放在容器内共享，是为了让配对、鉴权和本地密钥落盘都围绕同一实现工作。
+     */
+    val lanSyncCrypto: LanSyncCrypto by lazy {
+        LanSyncCrypto()
+    }
+
+    /**
+     * 本机同步身份与显示名单独装配，是为了避免同步页直接耦合 DataStore 细节。
+     */
+    val lanSyncLocalProfileStore: LanSyncLocalProfileStore by lazy {
+        LanSyncLocalProfileStore(
+            context = application,
+            crypto = lanSyncCrypto
+        )
+    }
+
+    /**
+     * 变更记录器作为共享基础设施存在，能让内容写入、设置写入和复习事务共用同一份 journal 规则。
+     */
+    val lanSyncChangeRecorder: LanSyncChangeRecorder by lazy {
+        LanSyncChangeRecorder(
+            syncChangeDao = syncChangeDao,
+            crypto = lanSyncCrypto
+        )
+    }
+
+    /**
+     * 端口冲突处理单独抽象后，同步服务启动时就不必把扫描逻辑硬编码进 HTTP 服务实现。
+     */
+    val lanSyncPortAllocator: LanSyncPortAllocator by lazy {
+        LanSyncPortAllocator()
+    }
 
     /**
      * 设置仓储放在容器层创建，能保证全应用对默认值与读写路径的一致理解，
@@ -76,7 +117,9 @@ class AppContainer(
      */
     val appSettingsRepository: AppSettingsRepository by lazy {
         DataStoreAppSettingsRepository(
-            dataStore = application.appSettingsDataStore
+            dataStore = application.appSettingsDataStore,
+            timeProvider = timeProvider,
+            syncChangeRecorder = lanSyncChangeRecorder
         )
     }
 
@@ -85,15 +128,30 @@ class AppContainer(
      * 并且后续首页统计、提醒 Worker 与备份导出都会复用同一套查询口径。
      */
     val deckRepository: DeckRepository by lazy {
-        OfflineDeckRepository(deckDao = deckDao, dispatchers = dispatchers)
+        OfflineDeckRepository(
+            deckDao = deckDao,
+            dispatchers = dispatchers,
+            timeProvider = timeProvider,
+            syncChangeRecorder = lanSyncChangeRecorder
+        )
     }
 
     val cardRepository: CardRepository by lazy {
-        OfflineCardRepository(cardDao = cardDao, dispatchers = dispatchers)
+        OfflineCardRepository(
+            cardDao = cardDao,
+            dispatchers = dispatchers,
+            timeProvider = timeProvider,
+            syncChangeRecorder = lanSyncChangeRecorder
+        )
     }
 
     val questionRepository: QuestionRepository by lazy {
-        OfflineQuestionRepository(questionDao = questionDao, dispatchers = dispatchers)
+        OfflineQuestionRepository(
+            questionDao = questionDao,
+            dispatchers = dispatchers,
+            timeProvider = timeProvider,
+            syncChangeRecorder = lanSyncChangeRecorder
+        )
     }
 
     /**
@@ -117,7 +175,8 @@ class AppContainer(
             questionDao = questionDao,
             reviewRecordDao = reviewRecordDao,
             reviewScheduler = reviewScheduler,
-            dispatchers = dispatchers
+            dispatchers = dispatchers,
+            syncChangeRecorder = lanSyncChangeRecorder
         )
     }
 
@@ -163,9 +222,21 @@ class AppContainer(
     val lanSyncRepository: LanSyncRepository by lazy {
         LanSyncRepositoryImpl(
             context = application,
-            backupService = backupService,
+            database = database,
             appSettingsRepository = appSettingsRepository,
-            timeProvider = timeProvider
+            reminderScheduler = reminderScheduler,
+            timeProvider = timeProvider,
+            dispatchers = dispatchers,
+            localProfileStore = lanSyncLocalProfileStore,
+            crypto = lanSyncCrypto,
+            portAllocator = lanSyncPortAllocator,
+            syncChangeDao = syncChangeDao,
+            syncPeerDao = syncPeerDao,
+            syncPeerCursorDao = syncPeerCursorDao,
+            deckDao = deckDao,
+            cardDao = cardDao,
+            questionDao = questionDao,
+            reviewRecordDao = reviewRecordDao
         )
     }
 

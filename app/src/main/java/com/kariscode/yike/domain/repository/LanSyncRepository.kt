@@ -1,49 +1,50 @@
 package com.kariscode.yike.domain.repository
 
-import com.kariscode.yike.domain.model.LanSyncSnapshot
-import com.kariscode.yike.domain.model.LocalSyncSnapshot
-import com.kariscode.yike.domain.model.SyncDevice
+import com.kariscode.yike.domain.model.LanSyncConflictResolution
+import com.kariscode.yike.domain.model.LanSyncPeer
+import com.kariscode.yike.domain.model.LanSyncPreview
+import com.kariscode.yike.domain.model.LanSyncSessionState
 import kotlinx.coroutines.flow.Flow
 
 /**
- * 局域网同步仓储隔离了 NSD、HTTP 与备份恢复细节，
- * 这样同步页只表达“发现设备、查看摘要、执行覆盖同步”的业务意图。
+ * 局域网同步仓储对外只暴露会话级动作和状态，
+ * 是为了把发现、配对、网络传输和数据应用压缩到单一协调点，避免页面层跨多组件手工编排。
  */
 interface LanSyncRepository {
     /**
-     * 已发现设备通过 Flow 暴露，是为了让局域网广播变化能直接反映到同步页列表而无需手动刷新。
+     * 同步页持续订阅单一状态流即可获得设备列表、预览、进度和错误，
+     * 这样页面不必理解底层存在多少个并行子流程。
      */
-    fun observeDevices(): Flow<List<SyncDevice>>
+    fun observeSessionState(): Flow<LanSyncSessionState>
 
     /**
-     * 本机展示名称由仓储集中提供，是为了保证服务注册名、页面文案和远端清单使用同一设备语义。
+     * 会话启动后才允许发现与对外广播，是为了继续保持“只在用户主动使用时暴露局域网能力”的产品边界。
      */
-    fun getLocalDeviceName(): String
+    suspend fun startSession()
 
     /**
-     * 进入同步页后才启动发现与服务注册，是为了把网络暴露窗口限制在用户主动使用该功能时。
+     * 结束会话时统一停掉广播、发现和心跳，可避免后台继续暴露设备信息或占用网络资源。
      */
-    suspend fun start()
+    suspend fun stopSession()
 
     /**
-     * 离开页面后及时关闭发现与服务注册，可以减少电量开销并避免后台持续广播带来的惊扰。
+     * 设备名通过仓储入口更新，是为了确保本地持久化、对外广播和页面展示使用同一份身份信息。
      */
-    suspend fun stop()
+    suspend fun updateLocalDisplayName(displayName: String)
 
     /**
-     * 覆盖同步前需要先拿到本机规模摘要，
-     * 这样页面才能判断是否应先弹出确认提示而不是直接写入本地。
+     * 预览阶段先完成配对、远端摘要读取和冲突分析，
+     * 这样用户能在真正传输数据前看到这次同步将产生的双向影响。
      */
-    suspend fun getLocalSnapshot(): LocalSyncSnapshot
+    suspend fun prepareSync(peer: LanSyncPeer, pairingCode: String?): LanSyncPreview
 
     /**
-     * 远端摘要单独获取后，同步页可以在真正传输大文件前先完成冲突判断与风险提示。
+     * 确认冲突决议后再真正执行同步，是为了让“用户选了什么”与“协议实际应用了什么”保持一一对应。
      */
-    suspend fun fetchRemoteSnapshot(device: SyncDevice): LanSyncSnapshot
+    suspend fun runSync(preview: LanSyncPreview, resolutions: List<LanSyncConflictResolution>)
 
     /**
-     * 真正同步时直接拉取远端完整备份并恢复到本机，
-     * 是为了复用现有备份恢复链路而不是再维护第二套写库协议。
+     * 取消动作集中在仓储层处理，是为了由同一处统一终止网络请求、心跳和会话级任务。
      */
-    suspend fun importFromDevice(device: SyncDevice)
+    suspend fun cancelActiveSync()
 }

@@ -8,6 +8,7 @@ import com.kariscode.yike.data.local.db.dao.QuestionDao
 import com.kariscode.yike.data.local.db.dao.ReviewRecordDao
 import com.kariscode.yike.data.local.db.entity.QuestionEntity
 import com.kariscode.yike.data.mapper.RoomMappers
+import com.kariscode.yike.data.sync.LanSyncChangeRecorder
 import com.kariscode.yike.domain.model.Question
 import com.kariscode.yike.domain.model.ReviewRating
 import com.kariscode.yike.domain.model.ReviewRecord
@@ -25,7 +26,8 @@ class OfflineReviewRepository(
     private val questionDao: QuestionDao,
     private val reviewRecordDao: ReviewRecordDao,
     private val reviewScheduler: ReviewSchedulerV1,
-    private val dispatchers: AppDispatchers
+    private val dispatchers: AppDispatchers,
+    private val syncChangeRecorder: LanSyncChangeRecorder
 ) : ReviewRepository {
     /**
      * 复习页的读取只返回本卡片当前轮到期的问题，
@@ -87,6 +89,8 @@ class OfflineReviewRepository(
 
             questionDao.upsertAll(listOf(RoomMappers.run { updatedQuestion.toEntity() }))
             reviewRecordDao.insert(RoomMappers.run { reviewRecord.toEntity() })
+            syncChangeRecorder.recordQuestionUpsert(updatedQuestion)
+            syncChangeRecorder.recordReviewRecordInsert(reviewRecord)
 
             ReviewSubmission(
                 updatedQuestion = updatedQuestion,

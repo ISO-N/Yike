@@ -8,8 +8,11 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.kariscode.yike.core.time.TimeProvider
+import com.kariscode.yike.data.sync.LanSyncChangeRecorder
 import com.kariscode.yike.domain.model.AppSettings
 import com.kariscode.yike.domain.model.ThemeMode
+import com.kariscode.yike.domain.model.toSyncedAppSettings
 import com.kariscode.yike.domain.repository.AppSettingsRepository
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
@@ -24,7 +27,9 @@ import kotlinx.coroutines.flow.map
  * - 写入动作集中，便于后续在写入后触发提醒重建等副作用
  */
 class DataStoreAppSettingsRepository(
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    private val timeProvider: TimeProvider,
+    private val syncChangeRecorder: LanSyncChangeRecorder? = null
 ) : AppSettingsRepository {
     /**
      * 读取 DataStore 的容错和默认值解释必须保持单一入口，
@@ -50,23 +55,28 @@ class DataStoreAppSettingsRepository(
      * 可以通过用例编排而不必修改 UI 层读写细节。
      */
     override suspend fun setDailyReminderEnabled(enabled: Boolean) {
+        val before = getSettings()
         dataStore.edit { prefs -> prefs[Keys.dailyReminderEnabled] = enabled }
+        recordSyncedSettingsChange(previous = before, current = getSettings())
     }
 
     /**
      * 时间参数在此处统一保存，避免设置页组件各自保存导致 hour/minute 不一致。
      */
     override suspend fun setDailyReminderTime(hour: Int, minute: Int) {
+        val before = getSettings()
         dataStore.edit { prefs ->
             prefs[Keys.dailyReminderHour] = hour
             prefs[Keys.dailyReminderMinute] = minute
         }
+        recordSyncedSettingsChange(previous = before, current = getSettings())
     }
 
     /**
      * 整份设置快照通过一次 edit 落盘，能保证备份恢复时不会把同一份状态拆成多次磁盘写入。
      */
     override suspend fun setSettings(settings: AppSettings) {
+        val before = getSettings()
         dataStore.edit { prefs ->
             prefs[Keys.dailyReminderEnabled] = settings.dailyReminderEnabled
             prefs[Keys.dailyReminderHour] = settings.dailyReminderHour
@@ -79,6 +89,7 @@ class DataStoreAppSettingsRepository(
             }
             prefs[Keys.themeMode] = settings.themeMode.storageValue
         }
+        recordSyncedSettingsChange(previous = before, current = settings)
     }
 
     /**
@@ -104,7 +115,28 @@ class DataStoreAppSettingsRepository(
      * 同时不把枚举序列化策略泄漏给页面层。
      */
     override suspend fun setThemeMode(mode: ThemeMode) {
+        val before = getSettings()
         dataStore.edit { prefs -> prefs[Keys.themeMode] = mode.storageValue }
+        recordSyncedSettingsChange(previous = before, current = getSettings())
+    }
+
+    /**
+     * 同步层回放远端设置时需要避免再次写入本地 journal，
+     * 因此单独开放无记录入口能阻止“远端设置 -> 本地 journal -> 下次又推回远端”的回声。
+     */
+    suspend fun applySyncedSettingsWithoutRecording(settings: AppSettings) {
+        dataStore.edit { prefs ->
+            prefs[Keys.dailyReminderEnabled] = settings.dailyReminderEnabled
+            prefs[Keys.dailyReminderHour] = settings.dailyReminderHour
+            prefs[Keys.dailyReminderMinute] = settings.dailyReminderMinute
+            prefs[Keys.schemaVersion] = settings.schemaVersion
+            if (settings.backupLastAt == null) {
+                prefs.remove(Keys.backupLastAt)
+            } else {
+                prefs[Keys.backupLastAt] = settings.backupLastAt
+            }
+            prefs[Keys.themeMode] = settings.themeMode.storageValue
+        }
     }
 
     private object Keys {
@@ -133,5 +165,24 @@ class DataStoreAppSettingsRepository(
      */
     private fun Flow<Preferences>.recoverReadFailures(): Flow<Preferences> = catch { throwable ->
         if (throwable is IOException) emit(emptyPreferences()) else throw throwable
+    }
+
+    /**
+     * 只有跨设备可见字段真的发生变化时才写 journal，
+     * 是为了避免最近备份时间或 schemaVersion 这类本地技术字段把同步流水刷得过于嘈杂。
+     */
+    private suspend fun recordSyncedSettingsChange(
+        previous: AppSettings,
+        current: AppSettings
+    ) {
+        val previousSynced = previous.toSyncedAppSettings()
+        val currentSynced = current.toSyncedAppSettings()
+        if (previousSynced == currentSynced) {
+            return
+        }
+        syncChangeRecorder?.recordSettingsUpsert(
+            settings = currentSynced,
+            modifiedAt = timeProvider.nowEpochMillis()
+        )
     }
 }

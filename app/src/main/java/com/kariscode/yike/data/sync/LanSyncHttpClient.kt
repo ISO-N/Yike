@@ -1,58 +1,263 @@
 package com.kariscode.yike.data.sync
 
-import com.kariscode.yike.data.backup.BackupJson
-import com.kariscode.yike.domain.model.LanSyncSnapshot
-import com.kariscode.yike.domain.model.SyncDevice
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.serialization.kotlinx.json.json
-
-private const val LAN_SYNC_MANIFEST_PATH: String = "/lan-sync/manifest"
-private const val LAN_SYNC_BACKUP_PATH: String = "/lan-sync/backup"
+import kotlinx.coroutines.delay
+import kotlinx.serialization.KSerializer
 
 /**
- * HTTP 客户端封装在单独组件内，是为了让同步仓储只关心“从设备拿到什么”，不关心请求拼装细节。
+ * 局域网客户端把 hello、配对和受保护请求统一封装，是为了让仓储层只关注同步意图而不关心 HTTP 细节。
  */
-class LanSyncHttpClient {
+class LanSyncHttpClient(
+    private val crypto: LanSyncCrypto
+) {
     private val client = HttpClient(CIO) {
         install(ContentNegotiation) {
-            json(BackupJson.json)
+            json(LanSyncJson.json)
+        }
+        install(HttpTimeout) {
+            connectTimeoutMillis = 5_000
+            requestTimeoutMillis = 10_000
+            socketTimeoutMillis = 10_000
         }
     }
 
     /**
-     * 远端摘要先行获取，可以让页面在真正下载整份备份前完成冲突判断和用户确认。
+     * hello 走明文只返回最小发现资料，是为了在未配对前先完成版本和身份识别，而不提前暴露真正同步内容。
      */
-    suspend fun fetchManifest(device: SyncDevice): LanSyncSnapshot {
-        val payload = client.get(device.buildUrl(path = LAN_SYNC_MANIFEST_PATH)).body<LanSyncManifestPayload>()
-        return LanSyncSnapshot(
-            deviceId = payload.deviceId,
-            deviceName = payload.deviceName,
-            exportedAt = payload.exportedAt,
-            deckCount = payload.deckCount,
-            cardCount = payload.cardCount,
-            questionCount = payload.questionCount
+    suspend fun hello(hostAddress: String, port: Int): LanSyncHelloResponse =
+        retryIdempotent {
+            client.get(buildUrl(hostAddress = hostAddress, port = port, path = HELLO_PATH))
+                .body()
+        }
+
+    /**
+     * 首次配对使用临时配对密钥保护共享密钥，是为了让后续持久认证不必依赖用户持续记住 6 位配对码。
+     */
+    suspend fun pair(
+        hostAddress: String,
+        port: Int,
+        hello: LanSyncHelloResponse,
+        initiatorDeviceId: String,
+        initiatorDisplayName: String,
+        pairingCode: String,
+        sharedSecret: String
+    ): Boolean {
+        val key = crypto.derivePairingKey(
+            pairingCode = pairingCode,
+            deviceId = hello.deviceId,
+            nonce = hello.pairingNonce
+        )
+        val encryptedPayload = crypto.encrypt(
+            plainText = LanSyncJson.json.encodeToString(
+                LanSyncPairInitPayload.serializer(),
+                LanSyncPairInitPayload(sharedSecret = sharedSecret)
+            ),
+            keyBytes = key
+        )
+        val response = client.post(buildUrl(hostAddress = hostAddress, port = port, path = PAIR_INIT_PATH)) {
+            setBody(
+                LanSyncPairInitRequest(
+                    initiatorDeviceId = initiatorDeviceId,
+                    initiatorDisplayName = initiatorDisplayName,
+                    payload = encryptedPayload.toEnvelope()
+                )
+            )
+        }.body<LanSyncPairInitResponse>()
+        val payload = crypto.decrypt(
+            payload = response.payload.toEncryptedPayload(),
+            keyBytes = key
+        )
+        return LanSyncJson.json.decodeFromString(
+            LanSyncPairInitResponsePayload.serializer(),
+            payload
+        ).accepted
+    }
+
+    /**
+     * 心跳也走受保护请求，是为了避免未配对设备通过 ping 不断探知可信设备的真实在线状态。
+     */
+    suspend fun ping(
+        hostAddress: String,
+        port: Int,
+        requesterDeviceId: String,
+        sharedSecret: String,
+        requestedAt: Long
+    ): LanSyncPingResponsePayload = retryIdempotent {
+        postProtected(
+            hostAddress = hostAddress,
+            port = port,
+            path = PING_PATH,
+            requesterDeviceId = requesterDeviceId,
+            sharedSecret = sharedSecret,
+            payload = LanSyncPingPayload(requestedAt = requestedAt),
+            serializer = LanSyncPingPayload.serializer(),
+            responseSerializer = LanSyncPingResponsePayload.serializer()
         )
     }
 
     /**
-     * 真正同步时直接拉取远端备份 JSON，是为了继续复用既有恢复流程而不是引入第二套写库协议。
+     * pull 支持只拉 header，是为了在 preview 阶段先做冲突分析，再按需拉完整载荷。
      */
-    suspend fun fetchBackupJson(device: SyncDevice): String =
-        client.get(device.buildUrl(path = LAN_SYNC_BACKUP_PATH)).body()
+    suspend fun pullChanges(
+        hostAddress: String,
+        port: Int,
+        requesterDeviceId: String,
+        sharedSecret: String,
+        afterSeq: Long,
+        headersOnly: Boolean
+    ): LanSyncPullChangesResponsePayload = retryIdempotent {
+        postProtected(
+            hostAddress = hostAddress,
+            port = port,
+            path = PULL_CHANGES_PATH,
+            requesterDeviceId = requesterDeviceId,
+            sharedSecret = sharedSecret,
+            payload = LanSyncPullChangesPayload(afterSeq = afterSeq, headersOnly = headersOnly),
+            serializer = LanSyncPullChangesPayload.serializer(),
+            responseSerializer = LanSyncPullChangesResponsePayload.serializer()
+        )
+    }
 
     /**
-     * 同步组件在应用生命周期内会被重复复用，因此显式关闭客户端可以避免连接资源滞留。
+     * push 不做自动重试，而是依赖 sessionId 幂等处理，是为了避免客户端在未知提交结果下重复应用同一批变更。
+     */
+    suspend fun pushChanges(
+        hostAddress: String,
+        port: Int,
+        requesterDeviceId: String,
+        sharedSecret: String,
+        sessionId: String,
+        changes: List<SyncChangePayload>
+    ): LanSyncPushChangesResponsePayload = postProtected(
+        hostAddress = hostAddress,
+        port = port,
+        path = PUSH_CHANGES_PATH,
+        requesterDeviceId = requesterDeviceId,
+        sharedSecret = sharedSecret,
+        payload = LanSyncPushChangesPayload(sessionId = sessionId, changes = changes),
+        serializer = LanSyncPushChangesPayload.serializer(),
+        responseSerializer = LanSyncPushChangesResponsePayload.serializer()
+    )
+
+    /**
+     * ack 只在本地真正落库成功后调用，是为了让对端只推进自己已经被确认消费过的本地 seq。
+     */
+    suspend fun ack(
+        hostAddress: String,
+        port: Int,
+        requesterDeviceId: String,
+        sharedSecret: String,
+        sessionId: String,
+        remoteSeqApplied: Long
+    ): LanSyncAckResponsePayload = postProtected(
+        hostAddress = hostAddress,
+        port = port,
+        path = ACK_PATH,
+        requesterDeviceId = requesterDeviceId,
+        sharedSecret = sharedSecret,
+        payload = LanSyncAckPayload(sessionId = sessionId, remoteSeqApplied = remoteSeqApplied),
+        serializer = LanSyncAckPayload.serializer(),
+        responseSerializer = LanSyncAckResponsePayload.serializer()
+    )
+
+    /**
+     * 统一的受保护请求模板收口后，鉴权和加密规则只需要维护一份。
+     */
+    private suspend fun <P, R> postProtected(
+        hostAddress: String,
+        port: Int,
+        path: String,
+        requesterDeviceId: String,
+        sharedSecret: String,
+        payload: P,
+        serializer: KSerializer<P>,
+        responseSerializer: KSerializer<R>
+    ): R {
+        val encryptedPayload = crypto.encrypt(
+            plainText = LanSyncJson.json.encodeToString(serializer, payload),
+            keyBytes = crypto.decodeSecret(sharedSecret)
+        )
+        val response = client.post(buildUrl(hostAddress = hostAddress, port = port, path = path)) {
+            setBody(
+                LanSyncProtectedRequest(
+                    requesterDeviceId = requesterDeviceId,
+                    payload = encryptedPayload.toEnvelope()
+                )
+            )
+        }.body<LanSyncProtectedResponse>()
+        val decryptedBody = crypto.decrypt(
+            payload = response.payload.toEncryptedPayload(),
+            keyBytes = crypto.decodeSecret(sharedSecret)
+        )
+        return LanSyncJson.json.decodeFromString(responseSerializer, decryptedBody)
+    }
+
+    /**
+     * 幂等请求统一做指数退避，是为了在局域网抖动时保住用户体验，又避免对提交型请求造成重复副作用。
+     */
+    private suspend fun <T> retryIdempotent(action: suspend () -> T): T {
+        var attempt = 0
+        var lastError: Throwable? = null
+        while (attempt < RETRY_DELAYS_MILLIS.size + 1) {
+            try {
+                return action()
+            } catch (throwable: Throwable) {
+                lastError = throwable
+                if (attempt >= RETRY_DELAYS_MILLIS.lastIndex) {
+                    break
+                }
+                delay(RETRY_DELAYS_MILLIS[attempt])
+                attempt += 1
+            }
+        }
+        throw lastError ?: IllegalStateException("局域网同步请求失败")
+    }
+
+    /**
+     * 客户端在应用生命周期内会被反复复用，因此显式关闭能避免连接资源在页面退出后继续滞留。
      */
     fun close() {
         client.close()
     }
 
     /**
-     * 地址拼装集中后，IPv4 与端口格式可以统一维护，避免多个请求端点各自硬编码 URL 模板。
+     * URL 模板集中维护后，端点调整时不必在 hello/push/pull 等方法中逐个替换字符串。
      */
-    private fun SyncDevice.buildUrl(path: String): String = "http://$hostAddress:$port$path"
+    private fun buildUrl(hostAddress: String, port: Int, path: String): String =
+        "http://$hostAddress:$port$path"
+
+    /**
+     * 协议 DTO 与加密工具对象彼此隔离，是为了让网络模型继续保持纯可序列化结构。
+     */
+    private fun LanSyncCrypto.EncryptedPayload.toEnvelope(): LanSyncEncryptedEnvelope = LanSyncEncryptedEnvelope(
+        iv = iv,
+        cipherText = cipherText
+    )
+
+    /**
+     * 解密前把网络 DTO 转回加密工具对象，是为了避免加解密工具直接依赖网络模型。
+     */
+    private fun LanSyncEncryptedEnvelope.toEncryptedPayload(): LanSyncCrypto.EncryptedPayload =
+        LanSyncCrypto.EncryptedPayload(
+            iv = iv,
+            cipherText = cipherText
+        )
+
+    private companion object {
+        private const val HELLO_PATH: String = "/lan-sync/v2/hello"
+        private const val PAIR_INIT_PATH: String = "/lan-sync/v2/pair/init"
+        private const val PING_PATH: String = "/lan-sync/v2/ping"
+        private const val PULL_CHANGES_PATH: String = "/lan-sync/v2/changes/pull"
+        private const val PUSH_CHANGES_PATH: String = "/lan-sync/v2/changes/push"
+        private const val ACK_PATH: String = "/lan-sync/v2/sync/ack"
+        private val RETRY_DELAYS_MILLIS: LongArray = longArrayOf(1_000L, 2_000L, 4_000L)
+    }
 }

@@ -1,11 +1,14 @@
 package com.kariscode.yike.data.repository
 
 import com.kariscode.yike.core.dispatchers.AppDispatchers
+import com.kariscode.yike.core.time.TimeProvider
 import com.kariscode.yike.data.local.db.dao.QuestionDao
 import com.kariscode.yike.data.local.db.dao.TodayReviewSummaryRow
 import com.kariscode.yike.data.local.db.entity.QuestionEntity
 import com.kariscode.yike.data.mapper.RoomMappers
+import com.kariscode.yike.data.sync.LanSyncChangeRecorder
 import com.kariscode.yike.domain.model.Question
+import com.kariscode.yike.domain.model.SyncEntityType
 import com.kariscode.yike.domain.model.TodayReviewSummary
 import com.kariscode.yike.domain.repository.QuestionRepository
 import kotlinx.coroutines.flow.Flow
@@ -16,7 +19,9 @@ import kotlinx.coroutines.flow.Flow
  */
 class OfflineQuestionRepository(
     private val questionDao: QuestionDao,
-    private val dispatchers: AppDispatchers
+    private val dispatchers: AppDispatchers,
+    private val timeProvider: TimeProvider,
+    private val syncChangeRecorder: LanSyncChangeRecorder
 ) : QuestionRepository {
     /**
      * 观察式查询让编辑页在新增/删除后自然更新，避免草稿状态与数据库脱节。
@@ -48,6 +53,9 @@ class OfflineQuestionRepository(
      */
     override suspend fun upsertAll(questions: List<Question>) = dispatchers.onIo {
         questionDao.upsertAll(questions.map { RoomMappers.run { it.toEntity() } })
+        questions.forEach { question ->
+            syncChangeRecorder.recordQuestionUpsert(question)
+        }
         Unit
     }
 
@@ -88,7 +96,16 @@ class OfflineQuestionRepository(
      * 也能避免为了同一条删除路径先执行一次多余查询。
      */
     override suspend fun delete(questionId: String) = dispatchers.onIo {
+        val current = questionDao.findById(questionId)?.let { entity ->
+            RoomMappers.run { entity.toDomain() }
+        }
         questionDao.deleteById(questionId)
+        syncChangeRecorder.recordDelete(
+            entityType = SyncEntityType.QUESTION,
+            entityId = questionId,
+            summary = current?.prompt?.take(48) ?: questionId,
+            modifiedAt = current?.updatedAt ?: timeProvider.nowEpochMillis()
+        )
         Unit
     }
 
@@ -97,7 +114,18 @@ class OfflineQuestionRepository(
      */
     override suspend fun deleteAll(questionIds: Collection<String>) = dispatchers.onIo {
         if (questionIds.isEmpty()) return@onIo
+        val currentQuestions = questionDao.listByIds(questionIds.toList()).map { entity ->
+            RoomMappers.run { entity.toDomain() }
+        }
         questionDao.deleteByIds(questionIds)
+        currentQuestions.forEach { question ->
+            syncChangeRecorder.recordDelete(
+                entityType = SyncEntityType.QUESTION,
+                entityId = question.id,
+                summary = question.prompt.take(48),
+                modifiedAt = question.updatedAt
+            )
+        }
         Unit
     }
 }

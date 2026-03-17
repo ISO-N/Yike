@@ -1,12 +1,15 @@
 package com.kariscode.yike.data.repository
 
 import com.kariscode.yike.core.dispatchers.AppDispatchers
+import com.kariscode.yike.core.time.TimeProvider
 import com.kariscode.yike.data.local.db.dao.CardDao
 import com.kariscode.yike.data.local.db.entity.QuestionEntity
 import com.kariscode.yike.data.mapper.RoomMappers
+import com.kariscode.yike.data.sync.LanSyncChangeRecorder
 import com.kariscode.yike.domain.model.ArchivedCardSummary
 import com.kariscode.yike.domain.model.Card
 import com.kariscode.yike.domain.model.CardSummary
+import com.kariscode.yike.domain.model.SyncEntityType
 import com.kariscode.yike.domain.repository.CardRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -17,7 +20,9 @@ import kotlinx.coroutines.flow.map
  */
 class OfflineCardRepository(
     private val cardDao: CardDao,
-    private val dispatchers: AppDispatchers
+    private val dispatchers: AppDispatchers,
+    private val timeProvider: TimeProvider,
+    private val syncChangeRecorder: LanSyncChangeRecorder
 ) : CardRepository {
     /**
      * 观察式查询能让卡片列表在新增/归档后自动刷新，避免页面状态手动同步。
@@ -70,6 +75,7 @@ class OfflineCardRepository(
      */
     override suspend fun upsert(card: Card) = dispatchers.onIo {
         cardDao.upsert(RoomMappers.run { card.toEntity() })
+        syncChangeRecorder.recordCardUpsert(card)
         Unit
     }
 
@@ -78,7 +84,14 @@ class OfflineCardRepository(
      */
     override suspend fun setArchived(cardId: String, archived: Boolean, updatedAt: Long) =
         dispatchers.onIo {
+            val current = cardDao.findById(cardId)?.let { entity ->
+                RoomMappers.run { entity.toDomain() }
+            }
             cardDao.setArchived(cardId = cardId, archived = archived, updatedAt = updatedAt)
+            val updatedCard = current?.copy(archived = archived, updatedAt = updatedAt)
+            if (updatedCard != null) {
+                syncChangeRecorder.recordCardUpsert(updatedCard)
+            }
             Unit
         }
 
@@ -87,7 +100,16 @@ class OfflineCardRepository(
      * 不需要为了同一条删除语义先额外读取实体。
      */
     override suspend fun delete(cardId: String) = dispatchers.onIo {
+        val current = cardDao.findById(cardId)?.let { entity ->
+            RoomMappers.run { entity.toDomain() }
+        }
         cardDao.deleteById(cardId)
+        syncChangeRecorder.recordDelete(
+            entityType = SyncEntityType.CARD,
+            entityId = cardId,
+            summary = current?.title ?: cardId,
+            modifiedAt = current?.updatedAt ?: timeProvider.nowEpochMillis()
+        )
         Unit
     }
 }

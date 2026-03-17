@@ -7,6 +7,7 @@ import com.kariscode.yike.data.local.db.YikeDatabase
 import com.kariscode.yike.data.local.db.entity.CardEntity
 import com.kariscode.yike.data.local.db.entity.DeckEntity
 import com.kariscode.yike.data.local.db.entity.QuestionEntity
+import com.kariscode.yike.data.sync.createTestSyncChangeRecorder
 import com.kariscode.yike.domain.model.ReviewRating
 import com.kariscode.yike.domain.scheduler.ReviewSchedulerV1
 import kotlinx.coroutines.CoroutineDispatcher
@@ -49,7 +50,8 @@ class OfflineReviewRepositoryTest {
                 override val main: CoroutineDispatcher = testDispatcher
                 override val io: CoroutineDispatcher = testDispatcher
                 override val default: CoroutineDispatcher = testDispatcher
-            }
+            },
+            syncChangeRecorder = createTestSyncChangeRecorder()
         )
     }
 

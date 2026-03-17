@@ -1,6 +1,8 @@
 package com.kariscode.yike.data.repository
 
 import com.kariscode.yike.core.dispatchers.AppDispatchers
+import com.kariscode.yike.data.sync.FixedTimeProvider
+import com.kariscode.yike.data.sync.createTestSyncChangeRecorder
 import com.kariscode.yike.data.local.db.dao.ArchivedCardSummaryRow
 import com.kariscode.yike.data.local.db.dao.CardDao
 import com.kariscode.yike.data.local.db.dao.CardSummaryRow
@@ -42,7 +44,9 @@ class OfflineCardRepositoryTest {
                 override val main: CoroutineDispatcher = testDispatcher
                 override val io: CoroutineDispatcher = testDispatcher
                 override val default: CoroutineDispatcher = testDispatcher
-            }
+            },
+            timeProvider = FixedTimeProvider(now = 999L),
+            syncChangeRecorder = createTestSyncChangeRecorder()
         )
     }
 

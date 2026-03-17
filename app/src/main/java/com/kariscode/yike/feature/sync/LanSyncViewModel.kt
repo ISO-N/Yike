@@ -2,270 +2,345 @@ package com.kariscode.yike.feature.sync
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import com.kariscode.yike.core.coroutine.parallel
-import com.kariscode.yike.core.message.ErrorMessages
+import androidx.lifecycle.viewModelScope
 import com.kariscode.yike.core.viewmodel.launchResult
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
-import com.kariscode.yike.domain.model.LocalSyncSnapshot
-import com.kariscode.yike.domain.model.SyncConflict
-import com.kariscode.yike.domain.model.SyncDevice
+import com.kariscode.yike.domain.model.LanSyncConflictChoice
+import com.kariscode.yike.domain.model.LanSyncConflictResolution
+import com.kariscode.yike.domain.model.LanSyncPeer
+import com.kariscode.yike.domain.model.LanSyncPreview
+import com.kariscode.yike.domain.model.LanSyncSessionState
+import com.kariscode.yike.domain.model.LanSyncStage
 import com.kariscode.yike.domain.repository.LanSyncRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import androidx.lifecycle.viewModelScope
 
 /**
- * 同步页状态同时覆盖设备发现、本机摘要、冲突确认与结果反馈，
- * 统一建模可以避免网络流程散落在页面 remember 状态里难以收口。
+ * 同步页状态同时承载仓储会话状态和页面临时输入，
+ * 是为了把“协议事实”和“用户正在编辑什么”分开维护，避免一边刷新设备列表一边覆盖掉输入中的配对码。
  */
 data class LanSyncUiState(
-    val isSessionActive: Boolean,
-    val isPreparing: Boolean,
-    val isSyncing: Boolean,
-    val localDeviceName: String,
-    val localSnapshot: LocalSyncSnapshot?,
-    val devices: List<SyncDevice>,
-    val message: String?,
-    val errorMessage: String?,
-    val pendingConflict: SyncConflict?
+    val session: LanSyncSessionState,
+    val pendingPairingPeer: LanSyncPeer?,
+    val pairingCodeInput: String,
+    val pendingPreview: LanSyncPreview?,
+    val showConflictDialog: Boolean,
+    val conflictChoices: Map<String, LanSyncConflictChoice>,
+    val isEditingLocalName: Boolean,
+    val localNameInput: String
 )
 
 /**
- * 局域网同步 ViewModel 负责把发现、摘要读取和恢复流程编排成一个受控交互序列，
- * 避免页面层直接操作网络与数据库能力。
+ * LAN Sync V2 的 ViewModel 把设备发现、配对、预览和执行串成一条状态机，
+ * 避免页面层同时操作仓储和本地 remember 状态而让流程失控。
  */
 class LanSyncViewModel(
     private val lanSyncRepository: LanSyncRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
         LanSyncUiState(
-            isSessionActive = false,
-            isPreparing = false,
-            isSyncing = false,
-            localDeviceName = lanSyncRepository.getLocalDeviceName(),
-            localSnapshot = null,
-            devices = emptyList(),
-            message = null,
-            errorMessage = null,
-            pendingConflict = null
+            session = LanSyncSessionState(
+                localProfile = com.kariscode.yike.domain.model.LanSyncLocalProfile(
+                    deviceId = "loading",
+                    displayName = "当前设备",
+                    shortDeviceId = "------",
+                    pairingCode = "------"
+                ),
+                peers = emptyList(),
+                isSessionActive = false,
+                preview = null,
+                progress = com.kariscode.yike.domain.model.LanSyncProgress(
+                    stage = LanSyncStage.IDLE,
+                    message = "等待开始发现",
+                    bytesTransferred = 0L,
+                    totalBytes = null,
+                    itemsProcessed = 0,
+                    totalItems = null
+                ),
+                activeFailure = null,
+                message = null
+            ),
+            pendingPairingPeer = null,
+            pairingCodeInput = "",
+            pendingPreview = null,
+            showConflictDialog = false,
+            conflictChoices = emptyMap(),
+            isEditingLocalName = false,
+            localNameInput = ""
         )
     )
     val uiState: StateFlow<LanSyncUiState> = _uiState.asStateFlow()
 
     init {
         /**
-         * 设备列表通过持续订阅回写状态，是为了让局域网内设备上下线时页面无需人工刷新。
+         * 页面只订阅仓储单一状态源，是为了让发现、心跳和同步进度这些后台变化都自动反映到 UI。
          */
         viewModelScope.launch {
-            lanSyncRepository.observeDevices().collect { devices ->
-                _uiState.update { state -> state.copy(devices = devices) }
+            lanSyncRepository.observeSessionState().collect { session ->
+                _uiState.update { state ->
+                    state.copy(
+                        session = session,
+                        localNameInput = if (state.isEditingLocalName) state.localNameInput else session.localProfile.displayName
+                    )
+                }
             }
         }
     }
 
     /**
-     * 拿到权限后再启动发现，可以把网络广播窗口压缩到用户明确进入同步页的时刻。
+     * 权限具备后再启动会话，可以保持“只在用户主动进入同步页时发现设备”的产品边界。
      */
     fun onPermissionReady() {
-        if (_uiState.value.isSessionActive || _uiState.value.isPreparing) {
+        if (_uiState.value.session.isSessionActive) {
             return
         }
-        _uiState.update { it.copy(isPreparing = true, message = null, errorMessage = null) }
         launchResult(
-            action = {
-                lanSyncRepository.start()
-                lanSyncRepository.getLocalSnapshot()
-            },
-            onSuccess = { snapshot ->
-                _uiState.update {
-                    it.copy(
-                        isSessionActive = true,
-                        isPreparing = false,
-                        localSnapshot = snapshot,
-                        errorMessage = null
-                    )
-                }
-            },
-            onFailure = {
-                _uiState.update {
-                    it.copy(
-                        isSessionActive = false,
-                        isPreparing = false,
-                        message = null,
-                        errorMessage = "局域网同步启动失败，请确认设备处于同一 Wi-Fi 后重试"
-                    )
-                }
-            }
+            action = { lanSyncRepository.startSession() },
+            onSuccess = {},
+            onFailure = {}
         )
     }
 
     /**
-     * 用户离开页面前允许主动停止发现，是为了在需要时把应用恢复到完全离线的默认边界。
+     * 主动停止会话可以让用户在同步页内就把应用恢复到完全离线状态，而不必依赖返回导航触发 onCleared。
      */
     fun onStopSession() {
-        if (!_uiState.value.isSessionActive || _uiState.value.isPreparing) {
-            return
-        }
-        _uiState.update { it.copy(isPreparing = true, message = null, errorMessage = null) }
         launchResult(
-            action = { lanSyncRepository.stop() },
+            action = { lanSyncRepository.stopSession() },
             onSuccess = {
                 _uiState.update {
                     it.copy(
-                        isSessionActive = false,
-                        isPreparing = false,
-                        devices = emptyList(),
-                        pendingConflict = null,
-                        errorMessage = null
+                        pendingPairingPeer = null,
+                        pairingCodeInput = "",
+                        pendingPreview = null,
+                        showConflictDialog = false,
+                        conflictChoices = emptyMap()
                     )
                 }
             },
-            onFailure = {
-                _uiState.update {
-                    it.copy(
-                        isPreparing = false,
-                        errorMessage = "局域网同步关闭失败，请稍后重试"
-                    )
-                }
-            }
+            onFailure = {}
         )
     }
 
     /**
-     * 同步前先拉取远端摘要，是为了让页面有机会在覆盖本机前展示明确的风险提示。
+     * 设备点击先决定是否需要配对，是为了让未信任设备先走授权，再进入真正的同步预览。
      */
-    fun onSyncDeviceClick(device: SyncDevice) {
-        if (_uiState.value.isSyncing || _uiState.value.isPreparing) {
+    fun onPeerClick(peer: LanSyncPeer) {
+        if (peer.trustState == com.kariscode.yike.domain.model.LanSyncTrustState.UNTRUSTED) {
+            _uiState.update {
+                it.copy(
+                    pendingPairingPeer = peer,
+                    pairingCodeInput = ""
+                )
+            }
             return
         }
-        _uiState.update { it.copy(isPreparing = true, message = null, errorMessage = null) }
+        buildPreview(peer = peer, pairingCode = null)
+    }
+
+    /**
+     * 配对码输入留在 ViewModel 中，是为了让配置变更或旋转后不丢失用户正在输入的授权信息。
+     */
+    fun onPairingCodeChange(value: String) {
+        _uiState.update { it.copy(pairingCodeInput = value.filter(Char::isDigit).take(6)) }
+    }
+
+    /**
+     * 首次配对确认后继续走预览，而不是直接开始同步，是为了保持“先看影响、再执行”的风险边界。
+     */
+    fun onConfirmPairing() {
+        val peer = _uiState.value.pendingPairingPeer ?: return
+        buildPreview(peer = peer, pairingCode = _uiState.value.pairingCodeInput)
+    }
+
+    /**
+     * 关闭配对弹窗时只清理授权输入，是为了让设备列表和后台发现状态保持不受影响。
+     */
+    fun onDismissPairing() {
+        _uiState.update {
+            it.copy(
+                pendingPairingPeer = null,
+                pairingCodeInput = ""
+            )
+        }
+    }
+
+    /**
+     * 同步预览确认后，若存在冲突则进入显式决议阶段，否则直接执行同步。
+     */
+    fun onConfirmPreview() {
+        val preview = _uiState.value.pendingPreview ?: return
+        if (preview.conflicts.isEmpty()) {
+            runSync(preview = preview, resolutions = emptyList())
+            return
+        }
+        val defaultChoices = preview.conflicts.associate { conflict ->
+            "${conflict.entityType.name}:${conflict.entityId}" to LanSyncConflictChoice.KEEP_REMOTE
+        }
+        _uiState.update {
+            it.copy(
+                showConflictDialog = true,
+                conflictChoices = defaultChoices
+            )
+        }
+    }
+
+    /**
+     * 预览关闭时只清空当前待确认内容，是为了让会话本身继续存活并可立即重新选择设备。
+     */
+    fun onDismissPreview() {
+        _uiState.update { it.copy(pendingPreview = null) }
+    }
+
+    /**
+     * 冲突选择显式按实体 key 存储，是为了让同一弹窗中的多个决议在用户滚动和修改时保持稳定对应。
+     */
+    fun onConflictChoiceChange(entityKey: String, choice: LanSyncConflictChoice) {
+        _uiState.update { state ->
+            state.copy(conflictChoices = state.conflictChoices + (entityKey to choice))
+        }
+    }
+
+    /**
+     * 用户确认冲突决议后再真正执行同步，是为了让传输和落库只围绕明确选择推进。
+     */
+    fun onConfirmConflicts() {
+        val preview = _uiState.value.pendingPreview ?: return
+        val resolutions = preview.conflicts.map { conflict ->
+            LanSyncConflictResolution(
+                entityType = conflict.entityType,
+                entityId = conflict.entityId,
+                choice = _uiState.value.conflictChoices["${conflict.entityType.name}:${conflict.entityId}"]
+                    ?: LanSyncConflictChoice.KEEP_REMOTE
+            )
+        }
+        _uiState.update { it.copy(showConflictDialog = false) }
+        runSync(preview = preview, resolutions = resolutions)
+    }
+
+    /**
+     * 冲突弹窗关闭只退回预览态，是为了让用户能重新阅读本次同步规模后再决定是否执行。
+     */
+    fun onDismissConflicts() {
+        _uiState.update { it.copy(showConflictDialog = false) }
+    }
+
+    /**
+     * 本机设备名编辑通过独立弹窗承载，是为了避免主页面列表刷新时直接打断文本输入。
+     */
+    fun onEditLocalName() {
+        _uiState.update {
+            it.copy(
+                isEditingLocalName = true,
+                localNameInput = it.session.localProfile.displayName
+            )
+        }
+    }
+
+    /**
+     * 文本输入留在本地状态，是为了让用户在确认保存前可以多次修改而不触发频繁持久化。
+     */
+    fun onLocalNameInputChange(value: String) {
+        _uiState.update { it.copy(localNameInput = value) }
+    }
+
+    /**
+     * 保存设备名时走仓储统一入口，是为了让本地存储、hello 响应和页面展示围绕同一份身份信息收敛。
+     */
+    fun onSaveLocalName() {
+        val name = _uiState.value.localNameInput.trim()
+        if (name.isBlank()) {
+            return
+        }
         launchResult(
-            action = {
-                parallel(
-                    first = { lanSyncRepository.getLocalSnapshot() },
-                    second = { lanSyncRepository.fetchRemoteSnapshot(device) }
-                )
+            action = { lanSyncRepository.updateLocalDisplayName(name) },
+            onSuccess = {
+                _uiState.update { it.copy(isEditingLocalName = false) }
             },
-            onSuccess = { (localSnapshot, remoteSnapshot) ->
-                val conflict = buildConflictOrNull(
-                    device = device,
-                    localSnapshot = localSnapshot,
-                    remoteSnapshot = remoteSnapshot
-                )
-                _uiState.update {
-                    it.copy(
-                        isPreparing = false,
-                        localSnapshot = localSnapshot,
-                        pendingConflict = conflict
-                    )
-                }
-                if (conflict == null) {
-                    performImport(device)
-                }
-            },
-            onFailure = {
-                _uiState.update {
-                    it.copy(
-                        isPreparing = false,
-                        errorMessage = "读取远端设备摘要失败，请确认对方已打开局域网同步页"
-                    )
-                }
-            }
+            onFailure = {}
         )
     }
 
     /**
-     * 冲突确认后继续同步，意味着用户已经知晓会覆盖本机内容，因此可以直接进入恢复流程。
+     * 取消设备名编辑时保留仓储中的真实名字，是为了避免未保存草稿误覆盖会话状态。
      */
-    fun onConfirmConflictSync() {
-        val conflict = _uiState.value.pendingConflict ?: return
-        _uiState.update { it.copy(pendingConflict = null) }
-        performImport(conflict.device)
+    fun onDismissLocalNameEditor() {
+        _uiState.update {
+            it.copy(
+                isEditingLocalName = false,
+                localNameInput = it.session.localProfile.displayName
+            )
+        }
     }
 
     /**
-     * 取消冲突弹窗时只清理当前待确认状态，是为了让设备列表和本机摘要保持可继续操作。
+     * 传输中取消统一委托给仓储，是为了由同一处处理网络请求中断和状态回滚。
      */
-    fun onDismissConflict() {
-        _uiState.update { it.copy(pendingConflict = null) }
+    fun onCancelActiveSync() {
+        launchResult(
+            action = { lanSyncRepository.cancelActiveSync() },
+            onSuccess = {},
+            onFailure = {}
+        )
     }
 
     /**
-     * ViewModel 销毁时及时停止服务与发现，可以避免页面退出后仍继续在局域网中广播自身。
+     * ViewModel 销毁时主动结束会话，可以避免同步页退出后仍在局域网里广播自身。
      */
     override fun onCleared() {
         viewModelScope.launch {
-            lanSyncRepository.stop()
+            lanSyncRepository.stopSession()
         }
         super.onCleared()
     }
 
     /**
-     * 真正写入本地前后都刷新本机摘要，是为了让页面上的本机规模能准确反映最新状态。
+     * 预览生成统一收口在单点，是为了让配对后的首轮预览和已信任设备的直接预览共享同一套处理逻辑。
      */
-    private fun performImport(device: SyncDevice) {
-        _uiState.update { it.copy(isSyncing = true, message = null, errorMessage = null) }
+    private fun buildPreview(peer: LanSyncPeer, pairingCode: String?) {
         launchResult(
-            action = {
-                lanSyncRepository.importFromDevice(device)
-                lanSyncRepository.getLocalSnapshot()
-            },
-            onSuccess = { snapshot ->
+            action = { lanSyncRepository.prepareSync(peer = peer, pairingCode = pairingCode) },
+            onSuccess = { preview ->
                 _uiState.update {
                     it.copy(
-                        isSyncing = false,
-                        localSnapshot = snapshot,
-                        message = "已从 ${device.deviceName} 同步到本机",
-                        errorMessage = null
+                        pendingPairingPeer = null,
+                        pairingCodeInput = "",
+                        pendingPreview = preview,
+                        showConflictDialog = false,
+                        conflictChoices = emptyMap()
                     )
                 }
             },
-            onFailure = {
-                _uiState.update {
-                    it.copy(
-                        isSyncing = false,
-                        message = null,
-                        errorMessage = ErrorMessages.BACKUP_RESTORE_FAILED
-                    )
-                }
-            }
+            onFailure = {}
         )
     }
 
     /**
-     * 只要本机已有内容就先要求确认，是为了明确维持“覆盖式同步”的风险语义而不是静默替换。
+     * 真正执行同步前先把本地弹窗态清掉，是为了让页面把注意力切回统一的会话进度而不是残留在旧预览上。
      */
-    private fun buildConflictOrNull(
-        device: SyncDevice,
-        localSnapshot: LocalSyncSnapshot,
-        remoteSnapshot: com.kariscode.yike.domain.model.LanSyncSnapshot
-    ): SyncConflict? {
-        val localItemCount = localSnapshot.deckCount + localSnapshot.cardCount + localSnapshot.questionCount
-        if (localItemCount <= 0) {
-            return null
+    private fun runSync(
+        preview: LanSyncPreview,
+        resolutions: List<LanSyncConflictResolution>
+    ) {
+        _uiState.update {
+            it.copy(
+                pendingPreview = null,
+                showConflictDialog = false
+            )
         }
-        val reason = if (
-            localSnapshot.lastBackupAt != null &&
-            remoteSnapshot.exportedAt < localSnapshot.lastBackupAt
-        ) {
-            "远端快照早于本机最近一次备份，继续同步仍会覆盖当前本机内容。"
-        } else {
-            "同步会覆盖当前本机已有的卡组、卡片和问题数据。"
-        }
-        return SyncConflict(
-            device = device,
-            remoteSnapshot = remoteSnapshot,
-            localSnapshot = localSnapshot,
-            reason = reason
+        launchResult(
+            action = { lanSyncRepository.runSync(preview = preview, resolutions = resolutions) },
+            onSuccess = {},
+            onFailure = {}
         )
     }
 
     companion object {
         /**
-         * 同步页工厂显式注入仓储，是为了保持网络与恢复流程可测试且不依赖全局单例。
+         * 工厂显式注入仓储，是为了让同步页在测试中可以替换为假实现而不依赖全局容器。
          */
         fun factory(
             lanSyncRepository: LanSyncRepository

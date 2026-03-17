@@ -1,10 +1,13 @@
 package com.kariscode.yike.data.repository
 
 import com.kariscode.yike.core.dispatchers.AppDispatchers
+import com.kariscode.yike.core.time.TimeProvider
 import com.kariscode.yike.data.local.db.dao.DeckDao
 import com.kariscode.yike.data.local.db.entity.QuestionEntity
 import com.kariscode.yike.data.mapper.RoomMappers
+import com.kariscode.yike.data.sync.LanSyncChangeRecorder
 import com.kariscode.yike.domain.model.Deck
+import com.kariscode.yike.domain.model.SyncEntityType
 import com.kariscode.yike.domain.model.DeckSummary
 import com.kariscode.yike.domain.repository.DeckRepository
 import kotlinx.coroutines.flow.Flow
@@ -16,7 +19,9 @@ import kotlinx.coroutines.flow.map
  */
 class OfflineDeckRepository(
     private val deckDao: DeckDao,
-    private val dispatchers: AppDispatchers
+    private val dispatchers: AppDispatchers,
+    private val timeProvider: TimeProvider,
+    private val syncChangeRecorder: LanSyncChangeRecorder
 ) : DeckRepository {
     /**
      * 直接映射 Flow 能让 UI 不触碰 Entity，从而保持 Room 细节不外泄。
@@ -82,6 +87,7 @@ class OfflineDeckRepository(
      */
     override suspend fun upsert(deck: Deck) = dispatchers.onIo {
         deckDao.upsert(RoomMappers.run { deck.toEntity() })
+        syncChangeRecorder.recordDeckUpsert(deck)
         Unit
     }
 
@@ -90,7 +96,14 @@ class OfflineDeckRepository(
      */
     override suspend fun setArchived(deckId: String, archived: Boolean, updatedAt: Long) =
         dispatchers.onIo {
+            val current = deckDao.findById(deckId)?.let { entity ->
+                RoomMappers.run { entity.toDomain() }
+            }
             deckDao.setArchived(deckId = deckId, archived = archived, updatedAt = updatedAt)
+            val updatedDeck = current?.copy(archived = archived, updatedAt = updatedAt)
+            if (updatedDeck != null) {
+                syncChangeRecorder.recordDeckUpsert(updatedDeck)
+            }
             Unit
         }
 
@@ -99,7 +112,16 @@ class OfflineDeckRepository(
      * 同时仍保留“记录不存在时静默无操作”的容错语义。
      */
     override suspend fun delete(deckId: String) = dispatchers.onIo {
+        val current = deckDao.findById(deckId)?.let { entity ->
+            RoomMappers.run { entity.toDomain() }
+        }
         deckDao.deleteById(deckId)
+        syncChangeRecorder.recordDelete(
+            entityType = SyncEntityType.DECK,
+            entityId = deckId,
+            summary = current?.name ?: deckId,
+            modifiedAt = current?.updatedAt ?: timeProvider.nowEpochMillis()
+        )
         Unit
     }
 }

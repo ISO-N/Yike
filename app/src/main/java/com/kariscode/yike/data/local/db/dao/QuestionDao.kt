@@ -58,6 +58,12 @@ interface QuestionDao {
     suspend fun findById(questionId: String): QuestionEntity?
 
     /**
+     * 批量删除前需要先取回摘要信息时，直接按 id 集合查询可避免 Repository 反复单条 findById。
+     */
+    @Query("SELECT * FROM question WHERE id IN (:questionIds)")
+    suspend fun listByIds(questionIds: List<String>): List<QuestionEntity>
+
+    /**
      * 评分事务需要知道题目所属卡组的调度上限，
      * 在 DAO 层直接关联查询可以避免仓储为了一次提交再拼多跳读取链路。
      */
