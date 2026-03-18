@@ -1,6 +1,7 @@
 package com.kariscode.yike.data.settings
 
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -55,41 +56,28 @@ class DataStoreAppSettingsRepository(
      * 可以通过用例编排而不必修改 UI 层读写细节。
      */
     override suspend fun setDailyReminderEnabled(enabled: Boolean) {
-        val before = getSettings()
-        dataStore.edit { prefs -> prefs[Keys.dailyReminderEnabled] = enabled }
-        recordSyncedSettingsChange(previous = before, current = getSettings())
+        updateSyncedSettings { prefs ->
+            prefs[Keys.dailyReminderEnabled] = enabled
+        }
     }
 
     /**
      * 时间参数在此处统一保存，避免设置页组件各自保存导致 hour/minute 不一致。
      */
     override suspend fun setDailyReminderTime(hour: Int, minute: Int) {
-        val before = getSettings()
-        dataStore.edit { prefs ->
+        updateSyncedSettings { prefs ->
             prefs[Keys.dailyReminderHour] = hour
             prefs[Keys.dailyReminderMinute] = minute
         }
-        recordSyncedSettingsChange(previous = before, current = getSettings())
     }
 
     /**
      * 整份设置快照通过一次 edit 落盘，能保证备份恢复时不会把同一份状态拆成多次磁盘写入。
      */
     override suspend fun setSettings(settings: AppSettings) {
-        val before = getSettings()
-        dataStore.edit { prefs ->
-            prefs[Keys.dailyReminderEnabled] = settings.dailyReminderEnabled
-            prefs[Keys.dailyReminderHour] = settings.dailyReminderHour
-            prefs[Keys.dailyReminderMinute] = settings.dailyReminderMinute
-            prefs[Keys.schemaVersion] = settings.schemaVersion
-            if (settings.backupLastAt == null) {
-                prefs.remove(Keys.backupLastAt)
-            } else {
-                prefs[Keys.backupLastAt] = settings.backupLastAt
-            }
-            prefs[Keys.themeMode] = settings.themeMode.storageValue
+        updateSyncedSettings { prefs ->
+            writeSettingsSnapshot(prefs = prefs, settings = settings)
         }
-        recordSyncedSettingsChange(previous = before, current = settings)
     }
 
     /**
@@ -115,9 +103,7 @@ class DataStoreAppSettingsRepository(
      * 同时不把枚举序列化策略泄漏给页面层。
      */
     override suspend fun setThemeMode(mode: ThemeMode) {
-        val before = getSettings()
-        dataStore.edit { prefs -> prefs[Keys.themeMode] = mode.storageValue }
-        recordSyncedSettingsChange(previous = before, current = getSettings())
+        updateSyncedSettings { prefs -> prefs[Keys.themeMode] = mode.storageValue }
     }
 
     /**
@@ -126,16 +112,7 @@ class DataStoreAppSettingsRepository(
      */
     suspend fun applySyncedSettingsWithoutRecording(settings: AppSettings) {
         dataStore.edit { prefs ->
-            prefs[Keys.dailyReminderEnabled] = settings.dailyReminderEnabled
-            prefs[Keys.dailyReminderHour] = settings.dailyReminderHour
-            prefs[Keys.dailyReminderMinute] = settings.dailyReminderMinute
-            prefs[Keys.schemaVersion] = settings.schemaVersion
-            if (settings.backupLastAt == null) {
-                prefs.remove(Keys.backupLastAt)
-            } else {
-                prefs[Keys.backupLastAt] = settings.backupLastAt
-            }
-            prefs[Keys.themeMode] = settings.themeMode.storageValue
+            writeSettingsSnapshot(prefs = prefs, settings = settings)
         }
     }
 
@@ -146,6 +123,26 @@ class DataStoreAppSettingsRepository(
         val schemaVersion = intPreferencesKey("schemaVersion")
         val backupLastAt = longPreferencesKey("backupLastAt")
         val themeMode = stringPreferencesKey("themeMode")
+    }
+
+    /**
+     * 整份设置快照统一经由同一写入入口，是为了让本地修改、恢复和同步回放共享完全一致的落盘语义，
+     * 避免某条路径未来新增字段后漏写或漏删可空值。
+     */
+    private fun writeSettingsSnapshot(
+        prefs: MutablePreferences,
+        settings: AppSettings
+    ) {
+        prefs[Keys.dailyReminderEnabled] = settings.dailyReminderEnabled
+        prefs[Keys.dailyReminderHour] = settings.dailyReminderHour
+        prefs[Keys.dailyReminderMinute] = settings.dailyReminderMinute
+        prefs[Keys.schemaVersion] = settings.schemaVersion
+        if (settings.backupLastAt == null) {
+            prefs.remove(Keys.backupLastAt)
+        } else {
+            prefs[Keys.backupLastAt] = settings.backupLastAt
+        }
+        prefs[Keys.themeMode] = settings.themeMode.storageValue
     }
 
     /**
@@ -165,6 +162,22 @@ class DataStoreAppSettingsRepository(
      */
     private fun Flow<Preferences>.recoverReadFailures(): Flow<Preferences> = catch { throwable ->
         if (throwable is IOException) emit(emptyPreferences()) else throw throwable
+    }
+
+    /**
+     * 可同步字段的写入统一走同一模板，是为了既保留按字段 edit 的并发安全性，
+     * 又避免每个 setter 都在 edit 后再额外读取一次 DataStore。
+     */
+    private suspend fun updateSyncedSettings(
+        update: (MutablePreferences) -> Unit
+    ) {
+        val before = getSettings()
+        var current = before
+        dataStore.edit { prefs ->
+            update(prefs)
+            current = prefs.toAppSettings()
+        }
+        recordSyncedSettingsChange(previous = before, current = current)
     }
 
     /**

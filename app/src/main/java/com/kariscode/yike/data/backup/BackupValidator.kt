@@ -1,6 +1,8 @@
 package com.kariscode.yike.data.backup
 
 import com.kariscode.yike.core.time.TimeTextFormatter
+import com.kariscode.yike.domain.model.QuestionStatus
+import com.kariscode.yike.domain.model.ReviewRating
 import com.kariscode.yike.domain.model.ThemeMode
 import com.kariscode.yike.domain.scheduler.ReviewSchedulerV1
 
@@ -52,12 +54,12 @@ class BackupValidator {
             require(question.id.isNotBlank() && question.prompt.isNotBlank() && question.cardId in cardIds) {
                 "备份文件无效或版本不兼容"
             }
-            require(question.status == "active" || question.status == "archived") {
+            require(
+                QuestionStatus.entries.any { status -> status.storageValue == question.status }
+            ) {
                 "备份文件无效或版本不兼容"
             }
-            require(question.stageIndex in 0..ReviewSchedulerV1.DEFAULT_INTERVAL_DAYS_BY_STAGE.lastIndex) {
-                "备份文件无效或版本不兼容"
-            }
+            requireStageIndexInRange(question.stageIndex)
             BackupJson.parseEpochMillis(question.dueAt)
             question.lastReviewedAt?.let(BackupJson::parseEpochMillis)
             BackupJson.parseEpochMillis(question.createdAt)
@@ -67,15 +69,11 @@ class BackupValidator {
 
         document.reviewRecords.forEach { record ->
             require(record.questionId in questionIds) { "备份文件无效或版本不兼容" }
-            require(record.rating in setOf("AGAIN", "HARD", "GOOD", "EASY")) {
+            require(ReviewRating.entries.any { rating -> rating.name == record.rating }) {
                 "备份文件无效或版本不兼容"
             }
-            require(record.oldStageIndex in 0..ReviewSchedulerV1.DEFAULT_INTERVAL_DAYS_BY_STAGE.lastIndex) {
-                "备份文件无效或版本不兼容"
-            }
-            require(record.newStageIndex in 0..ReviewSchedulerV1.DEFAULT_INTERVAL_DAYS_BY_STAGE.lastIndex) {
-                "备份文件无效或版本不兼容"
-            }
+            requireStageIndexInRange(record.oldStageIndex)
+            requireStageIndexInRange(record.newStageIndex)
             BackupJson.parseEpochMillis(record.oldDueAt)
             BackupJson.parseEpochMillis(record.newDueAt)
             BackupJson.parseEpochMillis(record.reviewedAt)
@@ -87,6 +85,16 @@ class BackupValidator {
      */
     private fun parseReminderTime(value: String) {
         TimeTextFormatter.parseHourMinute(value)
+    }
+
+    /**
+     * 复习阶段范围统一通过单点校验，是为了让题目与复习记录共享同一条约束来源，
+     * 避免后续扩展阶段数时漏改其中一处。
+     */
+    private fun requireStageIndexInRange(value: Int) {
+        require(value in 0..ReviewSchedulerV1.DEFAULT_INTERVAL_DAYS_BY_STAGE.lastIndex) {
+            "备份文件无效或版本不兼容"
+        }
     }
 
     /**
