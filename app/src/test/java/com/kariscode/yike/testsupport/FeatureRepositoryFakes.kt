@@ -42,6 +42,14 @@ open class FakeAppSettingsRepository(
     private val settingsFlow = MutableStateFlow(initialSettings)
 
     /**
+     * 设置更新统一走同一入口，是为了让各个 setter 继续保持真实仓储那种“只改目标字段”的语义，
+     * 同时避免测试支撑层因为字段扩展而在多处复制 `copy(...)` 模板。
+     */
+    private fun updateSettings(transform: (AppSettings) -> AppSettings) {
+        settingsFlow.value = transform(settingsFlow.value)
+    }
+
+    /**
      * 观察流始终回放最新设置，是为了让依赖首帧订阅的 ViewModel 行为与真实仓储保持一致。
      */
     override fun observeSettings(): Flow<AppSettings> = settingsFlow
@@ -55,17 +63,21 @@ open class FakeAppSettingsRepository(
      * 单独开关写入保留真实仓储语义，便于测试“是否只改一个字段”。
      */
     override suspend fun setDailyReminderEnabled(enabled: Boolean) {
-        settingsFlow.value = settingsFlow.value.copy(dailyReminderEnabled = enabled)
+        updateSettings { settings ->
+            settings.copy(dailyReminderEnabled = enabled)
+        }
     }
 
     /**
      * 时间更新集中改写 hour/minute，便于断言提醒调度是否拿到最新值。
      */
     override suspend fun setDailyReminderTime(hour: Int, minute: Int) {
-        settingsFlow.value = settingsFlow.value.copy(
-            dailyReminderHour = hour,
-            dailyReminderMinute = minute
-        )
+        updateSettings { settings ->
+            settings.copy(
+                dailyReminderHour = hour,
+                dailyReminderMinute = minute
+            )
+        }
     }
 
     /**
@@ -79,21 +91,27 @@ open class FakeAppSettingsRepository(
      * schemaVersion 的最小可变语义要保留，避免迁移相关测试不得不引入真实 DataStore。
      */
     override suspend fun setSchemaVersion(schemaVersion: Int) {
-        settingsFlow.value = settingsFlow.value.copy(schemaVersion = schemaVersion)
+        updateSettings { settings ->
+            settings.copy(schemaVersion = schemaVersion)
+        }
     }
 
     /**
      * 最近备份时间允许写空，是为了让备份页测试能覆盖“未知/未备份”的状态。
      */
     override suspend fun setBackupLastAt(epochMillis: Long?) {
-        settingsFlow.value = settingsFlow.value.copy(backupLastAt = epochMillis)
+        updateSettings { settings ->
+            settings.copy(backupLastAt = epochMillis)
+        }
     }
 
     /**
      * 主题写入保留独立入口，便于统计和设置页测试共享同一份假仓储。
      */
     override suspend fun setThemeMode(mode: ThemeMode) {
-        settingsFlow.value = settingsFlow.value.copy(themeMode = mode)
+        updateSettings { settings ->
+            settings.copy(themeMode = mode)
+        }
     }
 }
 
@@ -248,6 +266,13 @@ open class FakeDeckRepository : DeckRepository {
     val deletedDeckIds = mutableListOf<String>()
 
     /**
+     * 活动卡组快照统一从索引回算，是为了让 upsert 后的测试读取始终和当前内存索引保持一致。
+     */
+    private fun refreshActiveDecks() {
+        activeDecks = deckById.values.filterNot(Deck::archived)
+    }
+
+    /**
      * 活动卡组流直接回放内存状态，足以覆盖列表类页面的订阅行为。
      */
     override fun observeActiveDecks(): Flow<List<Deck>> = MutableStateFlow(activeDecks)
@@ -284,7 +309,7 @@ open class FakeDeckRepository : DeckRepository {
     override suspend fun upsert(deck: Deck) {
         upsertedDecks += deck
         deckById[deck.id] = deck
-        activeDecks = deckById.values.filterNot(Deck::archived)
+        refreshActiveDecks()
     }
 
     /**
@@ -313,6 +338,15 @@ open class FakeCardRepository : CardRepository {
     val upsertedCards = mutableListOf<Card>()
     val setArchivedCalls = mutableListOf<Triple<String, Boolean, Long>>()
     val deletedCardIds = mutableListOf<String>()
+
+    /**
+     * 单卡组活动卡片快照统一从索引重建，是为了让保存后的读取结果始终对齐当前假仓储状态。
+     */
+    private fun refreshActiveCards(deckId: String) {
+        activeCardsByDeck[deckId] = cardById.values.filter { candidate ->
+            candidate.deckId == deckId && !candidate.archived
+        }
+    }
 
     /**
      * 卡片活动流回放当前卡组列表，便于列表页观察更新。
@@ -348,9 +382,7 @@ open class FakeCardRepository : CardRepository {
     override suspend fun upsert(card: Card) {
         upsertedCards += card
         cardById[card.id] = card
-        activeCardsByDeck[card.deckId] = cardById.values.filter { candidate ->
-            candidate.deckId == card.deckId && !candidate.archived
-        }
+        refreshActiveCards(card.deckId)
     }
 
     /**

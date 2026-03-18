@@ -43,6 +43,16 @@ class AppContainer(
     private val application: Application
 ) {
     /**
+     * 内容仓储共享同一组三元依赖，是为了让装配时把“线程、时间与同步 journal”看成同一语义单元，
+     * 避免后续新增仓储时漏传其中某一项。
+     */
+    private data class ContentRepositoryDependencies(
+        val dispatchers: AppDispatchers,
+        val timeProvider: TimeProvider,
+        val syncChangeRecorder: LanSyncChangeRecorder
+    )
+
+    /**
      * 抽象时间是为了让调度、提醒与备份的时间计算可预测、可测试，
      * 避免在业务逻辑中散落 System.currentTimeMillis() 导致测试脆弱。
      */
@@ -133,33 +143,47 @@ class AppContainer(
     }
 
     /**
+     * 共享内容仓储依赖单独成组后，卡组、卡片和问题仓储的装配能保持同一口径。
+     */
+    private val contentRepositoryDependencies: ContentRepositoryDependencies by lazy {
+        ContentRepositoryDependencies(
+            dispatchers = dispatchers,
+            timeProvider = timeProvider,
+            syncChangeRecorder = lanSyncChangeRecorder
+        )
+    }
+
+    /**
      * 内容管理仓储统一在此装配，原因是它们共享同一数据库实例，
      * 并且后续首页统计、提醒 Worker 与备份导出都会复用同一套查询口径。
      */
     val deckRepository: DeckRepository by lazy {
+        val dependencies = contentRepositoryDependencies
         OfflineDeckRepository(
             deckDao = deckDao,
-            dispatchers = dispatchers,
-            timeProvider = timeProvider,
-            syncChangeRecorder = lanSyncChangeRecorder
+            dispatchers = dependencies.dispatchers,
+            timeProvider = dependencies.timeProvider,
+            syncChangeRecorder = dependencies.syncChangeRecorder
         )
     }
 
     val cardRepository: CardRepository by lazy {
+        val dependencies = contentRepositoryDependencies
         OfflineCardRepository(
             cardDao = cardDao,
-            dispatchers = dispatchers,
-            timeProvider = timeProvider,
-            syncChangeRecorder = lanSyncChangeRecorder
+            dispatchers = dependencies.dispatchers,
+            timeProvider = dependencies.timeProvider,
+            syncChangeRecorder = dependencies.syncChangeRecorder
         )
     }
 
     val questionRepository: QuestionRepository by lazy {
+        val dependencies = contentRepositoryDependencies
         OfflineQuestionRepository(
             questionDao = questionDao,
-            dispatchers = dispatchers,
-            timeProvider = timeProvider,
-            syncChangeRecorder = lanSyncChangeRecorder
+            dispatchers = dependencies.dispatchers,
+            timeProvider = dependencies.timeProvider,
+            syncChangeRecorder = dependencies.syncChangeRecorder
         )
     }
 
