@@ -25,29 +25,69 @@ object YikeDestination {
     const val QUESTION_SEARCH = "question_search"
     const val QUESTION_SEARCH_ROUTE = "question_search?deckId={deckId}&cardId={cardId}"
 
-    fun reviewCard(cardId: String): String = "review_card/$cardId"
+    /**
+     * 单卡复习路由统一从模板生成，是为了避免声明模板和拼接实现逐渐演变成两份来源。
+     */
+    fun reviewCard(cardId: String): String = buildPathRoute(
+        REVIEW_CARD,
+        NavArguments.CARD_ID to cardId
+    )
 
-    fun cardList(deckId: String): String = "card_list/$deckId"
+    /**
+     * 卡片列表路由复用模板替换后，后续若路径结构调整，只需维护一处占位定义。
+     */
+    fun cardList(deckId: String): String = buildPathRoute(
+        CARD_LIST,
+        NavArguments.DECK_ID to deckId
+    )
 
     /**
      * 使用 query 参数承载可选 deckId，能让编辑页在“从卡片列表进入”和“深链路直接进入”
      * 两种场景下都保持参数结构稳定。
      */
     fun questionEditor(cardId: String, deckId: String?): String {
-        val route = "question_editor/$cardId"
-        if (deckId == null) return route
-        return "$route?deckId=$deckId".toUri().toString()
+        val route = buildPathRoute(
+            QUESTION_EDITOR,
+            NavArguments.CARD_ID to cardId
+        )
+        return buildQueryRoute(
+            route,
+            NavArguments.DECK_ID to deckId
+        )
     }
 
     /**
      * 搜索页允许带入 deckId/cardId 预设筛选，是为了让首页总入口和卡片页“检索本卡”共享同一页面。
      */
-    fun questionSearch(deckId: String? = null, cardId: String? = null): String {
-        val params = buildList {
-            deckId?.let { add("deckId=$it") }
-            cardId?.let { add("cardId=$it") }
+    fun questionSearch(deckId: String? = null, cardId: String? = null): String = buildQueryRoute(
+        QUESTION_SEARCH,
+        NavArguments.DECK_ID to deckId,
+        NavArguments.CARD_ID to cardId
+    )
+
+    /**
+     * 路径参数占位统一经由模板替换，是为了让“路由声明”和“实际拼接”不会在修改时各自漂移。
+     */
+    private fun buildPathRoute(
+        template: String,
+        vararg pathArguments: Pair<String, String>
+    ): String = pathArguments.fold(template.substringBefore("?")) { route, (name, value) ->
+        route.replace("{$name}", value)
+    }
+
+    /**
+     * 可选 query 参数统一由同一入口组装，是为了让带筛选的导航在忽略空值时保持一致的编码策略。
+     */
+    private fun buildQueryRoute(
+        route: String,
+        vararg queryArguments: Pair<String, String?>
+    ): String {
+        val params = queryArguments.mapNotNull { (name, value) ->
+            value?.let { "$name=$it" }
         }
-        if (params.isEmpty()) return QUESTION_SEARCH
-        return "$QUESTION_SEARCH?${params.joinToString("&")}"
+        if (params.isEmpty()) {
+            return route
+        }
+        return "$route?${params.joinToString("&")}".toUri().toString()
     }
 }

@@ -52,6 +52,11 @@ fun YikeNavGraph(
 ) {
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentPrimaryDestination = primaryDestinationForRoute(currentBackStackEntry?.destination?.route)
+    val popBack: () -> Unit = { navController.popBackStack() }
+    val openTodayPreview: () -> Unit = { navController.navigate(YikeDestination.TODAY_PREVIEW) }
+    val openAnalytics: () -> Unit = { navController.navigate(YikeDestination.REVIEW_ANALYTICS) }
+    val openSearch: () -> Unit = { navController.navigate(YikeDestination.questionSearch()) }
+    val openReviewQueue: () -> Unit = { navController.navigate(YikeDestination.REVIEW_QUEUE) }
 
     Box(modifier = modifier.fillMaxSize()) {
         NavHost(
@@ -65,10 +70,10 @@ fun YikeNavGraph(
         ) {
             composable(route = YikeDestination.HOME) {
                 HomeScreen(
-                    onStartReview = { navController.navigate(YikeDestination.REVIEW_QUEUE) },
-                    onOpenTodayPreview = { navController.navigate(YikeDestination.TODAY_PREVIEW) },
-                    onOpenAnalytics = { navController.navigate(YikeDestination.REVIEW_ANALYTICS) },
-                    onOpenSearch = { navController.navigate(YikeDestination.questionSearch()) },
+                    onStartReview = openReviewQueue,
+                    onOpenTodayPreview = openTodayPreview,
+                    onOpenAnalytics = openAnalytics,
+                    onOpenSearch = openSearch,
                     onOpenDeckList = { navController.navigatePrimaryDestination(YikeDestination.DECK_LIST) },
                     onOpenSettings = { navController.navigatePrimaryDestination(YikeDestination.SETTINGS) },
                     onOpenDebug = { navController.navigate(YikeDestination.DEBUG) }
@@ -88,8 +93,8 @@ fun YikeNavGraph(
                 val deckId = entry.requireStringArg(NavArguments.DECK_ID)
                 CardListScreen(
                     deckId = deckId,
-                    onBack = { navController.popBackStack() },
-                    onOpenTodayPreview = { navController.navigate(YikeDestination.TODAY_PREVIEW) },
+                    onBack = popBack,
+                    onOpenTodayPreview = openTodayPreview,
                     onOpenSearch = { cardId ->
                         navController.navigate(YikeDestination.questionSearch(deckId = deckId, cardId = cardId))
                     },
@@ -115,13 +120,13 @@ fun YikeNavGraph(
                 QuestionEditorScreen(
                     cardId = cardId,
                     deckId = deckId,
-                    onBack = { navController.popBackStack() }
+                    onBack = popBack
                 )
             }
 
             composable(route = YikeDestination.REVIEW_QUEUE) {
                 ReviewQueueScreen(
-                    onBack = { navController.popBackStack() },
+                    onBack = popBack,
                     onOpenNextCard = { cardId -> navController.navigate(YikeDestination.reviewCard(cardId)) },
                     onBackToHome = {
                         navController.popBackStack(route = YikeDestination.HOME, inclusive = false)
@@ -151,36 +156,36 @@ fun YikeNavGraph(
 
             composable(route = YikeDestination.BACKUP_RESTORE) {
                 BackupRestoreScreen(
-                    onBack = { navController.popBackStack() }
+                    onBack = popBack
                 )
             }
 
             composable(route = YikeDestination.LAN_SYNC) {
                 LanSyncScreen(
-                    onBack = { navController.popBackStack() }
+                    onBack = popBack
                 )
             }
 
             composable(route = YikeDestination.RECYCLE_BIN) {
                 RecycleBinScreen(
-                    onBack = { navController.popBackStack() }
+                    onBack = popBack
                 )
             }
 
             composable(route = YikeDestination.TODAY_PREVIEW) {
                 TodayPreviewScreen(
-                    onBack = { navController.popBackStack() },
-                    onStartReview = { navController.navigate(YikeDestination.REVIEW_QUEUE) },
-                    onOpenAnalytics = { navController.navigate(YikeDestination.REVIEW_ANALYTICS) },
-                    onOpenSearch = { navController.navigate(YikeDestination.questionSearch()) }
+                    onBack = popBack,
+                    onStartReview = openReviewQueue,
+                    onOpenAnalytics = openAnalytics,
+                    onOpenSearch = openSearch
                 )
             }
 
             composable(route = YikeDestination.REVIEW_ANALYTICS) {
                 AnalyticsScreen(
-                    onBack = { navController.popBackStack() },
-                    onOpenPreview = { navController.navigate(YikeDestination.TODAY_PREVIEW) },
-                    onOpenSearch = { navController.navigate(YikeDestination.questionSearch()) }
+                    onBack = popBack,
+                    onOpenPreview = openTodayPreview,
+                    onOpenSearch = openSearch
                 )
             }
 
@@ -202,7 +207,7 @@ fun YikeNavGraph(
                 QuestionSearchScreen(
                     initialDeckId = entry.optionalStringArg(NavArguments.DECK_ID),
                     initialCardId = entry.optionalStringArg(NavArguments.CARD_ID),
-                    onBack = { navController.popBackStack() },
+                    onBack = popBack,
                     onOpenEditor = { cardId ->
                         navController.navigate(
                             YikeDestination.questionEditor(
@@ -217,7 +222,7 @@ fun YikeNavGraph(
                 )
             }
 
-            addDebugDestination(onBack = { navController.popBackStack() })
+            addDebugDestination(onBack = popBack)
         }
 
         currentPrimaryDestination?.let { destination ->
@@ -270,24 +275,64 @@ private fun primaryDestinationForRoute(
     ?.second
 
 /**
- * 进入动画只在一级入口之间启用，是为了让主导航保持桌面式滑动反馈，
- * 同时避免把流内页面也误伤成同一套横滑动画。
+ * 一级入口切换是否成立统一由同一入口判断，是为了让一级导航动画和普通流内动画共享一份边界定义。
  */
-private fun AnimatedContentTransitionScope<NavBackStackEntry>.primaryDestinationEnterTransition(): EnterTransition {
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.isPrimaryDestinationTransition(): Boolean =
+    primaryDestinationOrder(initialState.destination.route) != null &&
+        primaryDestinationOrder(targetState.destination.route) != null
+
+/**
+ * 一级入口切换方向集中计算后，进入、退出和返回动画都能共享同一套空间方向判断。
+ */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.primaryTransitionDirection():
+    AnimatedContentTransitionScope.SlideDirection? {
     val initialOrder = primaryDestinationOrder(initialState.destination.route)
     val targetOrder = primaryDestinationOrder(targetState.destination.route)
     if (initialOrder == null || targetOrder == null || initialOrder == targetOrder) {
-        return EnterTransition.None
+        return null
     }
-    val direction = if (targetOrder > initialOrder) {
+    return if (targetOrder > initialOrder) {
         AnimatedContentTransitionScope.SlideDirection.Left
     } else {
         AnimatedContentTransitionScope.SlideDirection.Right
     }
-    return slideIntoContainer(
-        towards = direction,
-        animationSpec = tween(durationMillis = 380)
-    ) + fadeIn(animationSpec = tween(durationMillis = 280))
+}
+
+/**
+ * 进入转场统一由共享的 slide+fade 组合生成，是为了让不同场景只需要表达方向和时长，而不是复制整段动画拼接。
+ */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.slideFadeEnter(
+    direction: AnimatedContentTransitionScope.SlideDirection,
+    slideDurationMillis: Int,
+    fadeDurationMillis: Int
+): EnterTransition = slideIntoContainer(
+    towards = direction,
+    animationSpec = tween(durationMillis = slideDurationMillis)
+) + fadeIn(animationSpec = tween(durationMillis = fadeDurationMillis))
+
+/**
+ * 退出转场同样走共享组合，是为了让 push/pop 与一级入口切换在收敛后仍保持镜像关系。
+ */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.slideFadeExit(
+    direction: AnimatedContentTransitionScope.SlideDirection,
+    slideDurationMillis: Int,
+    fadeDurationMillis: Int
+): ExitTransition = slideOutOfContainer(
+    towards = direction,
+    animationSpec = tween(durationMillis = slideDurationMillis)
+) + fadeOut(animationSpec = tween(durationMillis = fadeDurationMillis))
+
+/**
+ * 进入动画只在一级入口之间启用，是为了让主导航保持桌面式滑动反馈，
+ * 同时避免把流内页面也误伤成同一套横滑动画。
+ */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.primaryDestinationEnterTransition(): EnterTransition {
+    val direction = primaryTransitionDirection() ?: return EnterTransition.None
+    return slideFadeEnter(
+        direction = direction,
+        slideDurationMillis = 380,
+        fadeDurationMillis = 280
+    )
 }
 
 /**
@@ -295,20 +340,12 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.primaryDestination
  * 而不是前页和目标页各自独立地淡入淡出。
  */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.primaryDestinationExitTransition(): ExitTransition {
-    val initialOrder = primaryDestinationOrder(initialState.destination.route)
-    val targetOrder = primaryDestinationOrder(targetState.destination.route)
-    if (initialOrder == null || targetOrder == null || initialOrder == targetOrder) {
-        return ExitTransition.None
-    }
-    val direction = if (targetOrder > initialOrder) {
-        AnimatedContentTransitionScope.SlideDirection.Left
-    } else {
-        AnimatedContentTransitionScope.SlideDirection.Right
-    }
-    return slideOutOfContainer(
-        towards = direction,
-        animationSpec = tween(durationMillis = 380)
-    ) + fadeOut(animationSpec = tween(durationMillis = 280))
+    val direction = primaryTransitionDirection() ?: return ExitTransition.None
+    return slideFadeExit(
+        direction = direction,
+        slideDurationMillis = 380,
+        fadeDurationMillis = 280
+    )
 }
 
 /**
@@ -316,58 +353,54 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.primaryDestination
  * 这样既保留主导航的桌面式空间感，也让编辑、预览、统计和搜索页面不再像“瞬间硬切”。
  */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.appEnterTransition(): EnterTransition {
-    val initialOrder = primaryDestinationOrder(initialState.destination.route)
-    val targetOrder = primaryDestinationOrder(targetState.destination.route)
-    if (initialOrder != null && targetOrder != null) {
+    if (isPrimaryDestinationTransition()) {
         return primaryDestinationEnterTransition()
     }
-    return slideIntoContainer(
-        towards = AnimatedContentTransitionScope.SlideDirection.Left,
-        animationSpec = tween(durationMillis = 300)
-    ) + fadeIn(animationSpec = tween(durationMillis = 220))
+    return slideFadeEnter(
+        direction = AnimatedContentTransitionScope.SlideDirection.Left,
+        slideDurationMillis = 300,
+        fadeDurationMillis = 220
+    )
 }
 
 /**
  * 普通 push 场景下的退出动画采用与进入同向的轻量推开，是为了让流内页面切换更接近原生任务流节奏。
  */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.appExitTransition(): ExitTransition {
-    val initialOrder = primaryDestinationOrder(initialState.destination.route)
-    val targetOrder = primaryDestinationOrder(targetState.destination.route)
-    if (initialOrder != null && targetOrder != null) {
+    if (isPrimaryDestinationTransition()) {
         return primaryDestinationExitTransition()
     }
-    return slideOutOfContainer(
-        towards = AnimatedContentTransitionScope.SlideDirection.Left,
-        animationSpec = tween(durationMillis = 300)
-    ) + fadeOut(animationSpec = tween(durationMillis = 220))
+    return slideFadeExit(
+        direction = AnimatedContentTransitionScope.SlideDirection.Left,
+        slideDurationMillis = 300,
+        fadeDurationMillis = 220
+    )
 }
 
 /**
  * pop 进入动画与 push 方向镜像，是为了让用户在返回时获得明确的“回到上一层”空间反馈。
  */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.appPopEnterTransition(): EnterTransition {
-    val initialOrder = primaryDestinationOrder(initialState.destination.route)
-    val targetOrder = primaryDestinationOrder(targetState.destination.route)
-    if (initialOrder != null && targetOrder != null) {
+    if (isPrimaryDestinationTransition()) {
         return primaryDestinationEnterTransition()
     }
-    return slideIntoContainer(
-        towards = AnimatedContentTransitionScope.SlideDirection.Right,
-        animationSpec = tween(durationMillis = 300)
-    ) + fadeIn(animationSpec = tween(durationMillis = 220))
+    return slideFadeEnter(
+        direction = AnimatedContentTransitionScope.SlideDirection.Right,
+        slideDurationMillis = 300,
+        fadeDurationMillis = 220
+    )
 }
 
 /**
  * pop 退出动画与 pop 进入保持镜像，是为了让返回链路不再只剩淡出，而是具有稳定层级感。
  */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.appPopExitTransition(): ExitTransition {
-    val initialOrder = primaryDestinationOrder(initialState.destination.route)
-    val targetOrder = primaryDestinationOrder(targetState.destination.route)
-    if (initialOrder != null && targetOrder != null) {
+    if (isPrimaryDestinationTransition()) {
         return primaryDestinationExitTransition()
     }
-    return slideOutOfContainer(
-        towards = AnimatedContentTransitionScope.SlideDirection.Right,
-        animationSpec = tween(durationMillis = 300)
-    ) + fadeOut(animationSpec = tween(durationMillis = 220))
+    return slideFadeExit(
+        direction = AnimatedContentTransitionScope.SlideDirection.Right,
+        slideDurationMillis = 300,
+        fadeDurationMillis = 220
+    )
 }
