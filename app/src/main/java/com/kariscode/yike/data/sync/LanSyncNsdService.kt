@@ -1,7 +1,6 @@
 package com.kariscode.yike.data.sync
 
 import android.content.Context
-import android.net.nsd.NsdServiceInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -231,23 +230,3 @@ class LanSyncNsdService internal constructor(
         multicastLock = null
     }
 }
-
-/**
- * 平台值对象到 Android NSD 类型的转换集中在单点，是为了避免字段映射散落在多个回调里。
- */
-internal fun LanSyncPlatformServiceInfo.toAndroidServiceInfo(): NsdServiceInfo = NsdServiceInfo().apply {
-    serviceName = this@toAndroidServiceInfo.serviceName
-    serviceType = this@toAndroidServiceInfo.serviceType
-    port = this@toAndroidServiceInfo.port
-}
-
-/**
- * Android NSD 类型回转成平台值对象，是为了让上层始终面对同一套稳定的数据结构。
- */
-@Suppress("DEPRECATION")
-internal fun NsdServiceInfo.toPlatformServiceInfo(): LanSyncPlatformServiceInfo = LanSyncPlatformServiceInfo(
-    serviceName = serviceName,
-    serviceType = serviceType,
-    port = port,
-    hostAddress = host?.hostAddress
-)
