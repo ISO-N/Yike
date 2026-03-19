@@ -318,7 +318,8 @@ class CardListViewModel(
 
     /**
      * 熟练度统计依赖问题集合而不是卡片展示文案，
-     * 因此只有题目规模签名变化时才重算，可以避免仅编辑卡片标题时触发一次无意义检索。
+     * 因此只有“会影响问题集合与复习态”的签名变化时才重算，
+     * 这样既能避免仅编辑卡片标题时触发无意义检索，也能确保复习评分后摘要不会卡在旧分布。
      */
     private fun maybeRefreshMasterySummary(items: List<CardSummary>) {
         val currentSignature = buildMasterySummarySignature(items)
@@ -331,11 +332,14 @@ class CardListViewModel(
 
     /**
      * 签名只保留会影响熟练度统计的字段，是为了把“是否需要重算”判断保持轻量且可解释。
+     *
+     * `dueQuestionCount` 必须包含在内，是为了让复习评分导致 dueAt 前移/后移时能触发重算，
+     * 否则“题目数量不变但熟练度分布已变化”的场景会卡住摘要。
      */
     private fun buildMasterySummarySignature(items: List<CardSummary>): String = items
         .sortedBy { it.card.id }
         .joinToString(separator = "|") { summary ->
-            "${summary.card.id}:${summary.questionCount}"
+            "${summary.card.id}:${summary.questionCount}:${summary.dueQuestionCount}"
         }
 
     companion object {
