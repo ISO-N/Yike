@@ -15,18 +15,21 @@
 
 ## 2. 当前项目状态
 
-截至当前阶段，项目仍处于 Android Studio 初始化骨架状态，具备如下基础：
+截至 2026-03，项目已经完成首版离线闭环，不再是初始化骨架。当前状态如下：
 
 - 单模块 Android 应用：`:app`
-- Kotlin + Jetpack Compose
-- Material 3
-- 基础 `MainActivity`
-- 尚未引入 Room、DataStore、Navigation、WorkManager
+- Kotlin + Jetpack Compose + Material 3
+- 单 Activity + Navigation Compose 路由图
+- Room（含聚合查询、事务与 schema 导出）
+- DataStore（应用设置与同步配置）
+- WorkManager（每日提醒检查与重排）
+- 备份恢复（JSON 导出、校验、全量恢复）
+- 局域网同步（发现、配对、预览、冲突决议、双向应用）
 
-因此，v0.1 的架构设计应坚持两个原则：
+在此基础上，v0.1 后续架构演进应坚持两个原则：
 
-- **先保证分层清晰，再逐步补技术能力**
-- **先单模块稳定实现，再考虑多模块演进**
+- **保持分层边界稳定，优先收敛重复样板与超大文件复杂度**
+- **继续单模块内分域解耦，达到触发条件后再演进多模块**
 
 ---
 
