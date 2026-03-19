@@ -67,20 +67,10 @@ class CardListViewModel(
     private val timeProvider: TimeProvider
 ) : ViewModel() {
     /**
-     * 首屏是否真正完成，需要 deck 元数据和卡片首个发射都到位后再统一关闭 loading，
-     * 这样改成单订阅后仍能保持页面初始化反馈稳定。
-     */
-    private var initialDeckLoaded: Boolean = false
-
-    /**
-     * 列表订阅首次返回前保持 loading，可避免在删除首屏双读后让页面过早进入空列表态。
-     */
-    private var initialCardsLoaded: Boolean = false
-
-    /**
      * 熟练度摘要用独立 Job 收口，是为了在列表连续发射时只保留最后一次统计，避免无意义叠加查询。
      */
     private var masterySummaryJob: Job? = null
+    private var loadingTracker = CardListLoadingTracker()
 
     private val _uiState = MutableStateFlow(
         CardListUiState(
@@ -112,20 +102,21 @@ class CardListViewModel(
     private suspend fun loadDeckMetadata() {
         runCatching { deckRepository.findById(deckId) }
             .onSuccess { deck ->
-                initialDeckLoaded = true
-                _uiState.update {
-                    it.copy(
+                loadingTracker = loadingTracker.markDeckLoaded()
+                _uiState.update { state ->
+                    CardListStateReducer.deckLoaded(
+                        state = state,
                         deckName = deck?.name,
-                        isLoading = shouldKeepLoading()
+                        loadingTracker = loadingTracker
                     )
                 }
             }
             .onFailure {
-                initialDeckLoaded = true
-                _uiState.update {
-                    it.copy(
-                        isLoading = shouldKeepLoading(),
-                        message = null,
+                loadingTracker = loadingTracker.markDeckLoaded()
+                _uiState.update { state ->
+                    CardListStateReducer.loadFailed(
+                        state = state,
+                        loadingTracker = loadingTracker,
                         errorMessage = ErrorMessages.LOAD_FAILED
                     )
                 }
@@ -140,22 +131,22 @@ class CardListViewModel(
         cardRepository.observeActiveCardSummaries(deckId, now)
             .distinctUntilChanged()
             .catch { throwable ->
-                initialCardsLoaded = true
-                _uiState.update {
-                    it.copy(
-                        isLoading = shouldKeepLoading(),
-                        message = null,
+                loadingTracker = loadingTracker.markCardsLoaded()
+                _uiState.update { state ->
+                    CardListStateReducer.loadFailed(
+                        state = state,
+                        loadingTracker = loadingTracker,
                         errorMessage = throwable.userMessageOr(ErrorMessages.LOAD_FAILED)
                     )
                 }
             }
             .collect { items ->
-                initialCardsLoaded = true
-                _uiState.update {
-                    it.copy(
-                        isLoading = shouldKeepLoading(),
+                loadingTracker = loadingTracker.markCardsLoaded()
+                _uiState.update { state ->
+                    CardListStateReducer.itemsLoaded(
+                        state = state,
                         items = items,
-                        errorMessage = null
+                        loadingTracker = loadingTracker
                     )
                 }
                 refreshMasterySummary()
@@ -200,7 +191,7 @@ class CardListViewModel(
      * 关闭编辑器直接丢弃草稿，明确“未保存不落库”的交互语义。
      */
     fun onDismissEditor() {
-        _uiState.update { it.copy(editor = null, errorMessage = null) }
+        _uiState.update(CardListStateReducer::dismissEditor)
     }
 
     /**
@@ -210,7 +201,11 @@ class CardListViewModel(
         val editor = _uiState.value.editor ?: return
         val trimmedTitle = editor.primaryValue.trim()
         if (trimmedTitle.isBlank()) {
-            _uiState.update { it.copy(editor = editor.withValidationMessage(ErrorMessages.TITLE_REQUIRED)) }
+            _uiState.update { state ->
+                CardListStateReducer.updateEditor(state) {
+                    it.withValidationMessage(ErrorMessages.TITLE_REQUIRED)
+                }
+            }
             return
         }
 
@@ -230,8 +225,8 @@ class CardListViewModel(
                 )
                 cardRepository.upsert(card)
             },
-            onSuccess = { it.copy(editor = null, message = SuccessMessages.SAVED, errorMessage = null) },
-            onFailure = { state, _ -> state.copy(message = null, errorMessage = ErrorMessages.SAVE_FAILED) }
+            onSuccess = CardListStateReducer::saveSucceeded,
+            onFailure = { state, _ -> CardListStateReducer.mutationFailed(state, ErrorMessages.SAVE_FAILED) }
         )
     }
 
@@ -249,14 +244,14 @@ class CardListViewModel(
      * 删除需要先进入确认态，避免在列表交互中误触造成不可逆的数据丢失。
      */
     fun onDeleteCardClick(item: CardSummary) {
-        _uiState.update { it.copy(pendingDelete = item, errorMessage = null) }
+        _uiState.update { state -> CardListStateReducer.showDeleteConfirmation(state, item) }
     }
 
     /**
      * 退出确认态可以避免误触删除，符合高风险操作需要二次确认的原则。
      */
     fun onDismissDelete() {
-        _uiState.update { it.copy(pendingDelete = null, errorMessage = null) }
+        _uiState.update(CardListStateReducer::dismissDelete)
     }
 
     /**
@@ -266,7 +261,7 @@ class CardListViewModel(
         val pending = _uiState.value.pendingDelete ?: return
         executeMutation(errorMessage = ErrorMessages.DELETE_FAILED) {
             cardRepository.delete(pending.card.id)
-            _uiState.update { it.copy(pendingDelete = null, message = SuccessMessages.DELETED, errorMessage = null) }
+            _uiState.update(CardListStateReducer::deleteSucceeded)
         }
     }
 
@@ -274,23 +269,14 @@ class CardListViewModel(
      * 打开编辑器时统一清空旧反馈，是为了让创建和编辑都从同一个干净状态开始。
      */
     private fun openEditor(editor: TextMetadataDraft) {
-        _uiState.update {
-            it.copy(
-                editor = editor,
-                message = null,
-                errorMessage = null
-            )
-        }
+        _uiState.update { state -> CardListStateReducer.openEditor(state, editor) }
     }
 
     /**
      * 草稿更新收口后，标题与描述的输入路径就不需要各自重复 editor 判空模板。
      */
     private fun updateEditor(transform: (TextMetadataDraft) -> TextMetadataDraft) {
-        _uiState.update { state ->
-            val editor = state.editor ?: return@update state
-            state.copy(editor = transform(editor))
-        }
+        _uiState.update { state -> CardListStateReducer.updateEditor(state, transform) }
     }
 
     /**
@@ -303,7 +289,7 @@ class CardListViewModel(
         launchStateMutation(
             state = _uiState,
             action = action,
-            onFailure = { state, _ -> state.copy(message = null, errorMessage = errorMessage) }
+            onFailure = { state, _ -> CardListStateReducer.mutationFailed(state, errorMessage) }
         )
     }
 
@@ -324,15 +310,10 @@ class CardListViewModel(
                 )
                 DeckMasterySummaryCalculator.calculate(questions)
             },
-            onSuccess = { state, summary -> state.copy(masterySummary = summary) },
-            onFailure = { state, _ -> state.copy(masterySummary = null) }
+            onSuccess = CardListStateReducer::masteryLoaded,
+            onFailure = { state, _ -> CardListStateReducer.masteryLoadFailed(state) }
         )
     }
-
-    /**
-     * 首屏 loading 只依赖两个初始化步骤的完成信号，是为了让后续实时更新不再反复切换加载态。
-     */
-    private fun shouldKeepLoading(): Boolean = !(initialDeckLoaded && initialCardsLoaded)
 
     companion object {
         /**
