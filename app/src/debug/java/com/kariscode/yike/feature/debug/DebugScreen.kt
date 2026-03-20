@@ -34,7 +34,8 @@ fun DebugScreen(
         factory = DebugViewModel.factory(
             database = container.database,
             dispatchers = container.dispatchers,
-            timeProvider = container.timeProvider
+            timeProvider = container.timeProvider,
+            syncChangeRecorder = container.lanSyncChangeRecorder
         )
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()

@@ -6,10 +6,15 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kariscode.yike.core.dispatchers.DefaultAppDispatchers
 import com.kariscode.yike.core.time.TimeProvider
 import com.kariscode.yike.data.local.db.YikeDatabase
+import com.kariscode.yike.data.sync.LanSyncChangeRecorder
+import com.kariscode.yike.data.sync.LanSyncCrypto
+import com.kariscode.yike.domain.model.SyncChangeOperation
+import com.kariscode.yike.domain.model.SyncEntityType
 import com.kariscode.yike.domain.scheduler.ReviewSchedulerV1
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -22,6 +27,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class DebugViewModelIntegrationTest {
     private lateinit var database: YikeDatabase
+    private lateinit var syncChangeRecorder: LanSyncChangeRecorder
 
     /**
      * 使用内存数据库可以把断言聚焦在生成规则本身，避免污染设备上的真实开发数据。
@@ -32,6 +38,10 @@ class DebugViewModelIntegrationTest {
         database = Room.inMemoryDatabaseBuilder(context, YikeDatabase::class.java)
             .allowMainThreadQueries()
             .build()
+        syncChangeRecorder = LanSyncChangeRecorder(
+            syncChangeDao = database.syncChangeDao(),
+            crypto = LanSyncCrypto()
+        )
     }
 
     /**
@@ -52,11 +62,12 @@ class DebugViewModelIntegrationTest {
         val viewModel = DebugViewModel(
             database = database,
             dispatchers = DefaultAppDispatchers(),
-            timeProvider = FixedTimeProvider(nowEpochMillis = fixedNow)
+            timeProvider = FixedTimeProvider(nowEpochMillis = fixedNow),
+            syncChangeRecorder = syncChangeRecorder
         )
 
         viewModel.generateRandomData()
-        waitForGeneration(viewModel = viewModel)
+        waitForIdle(viewModel = viewModel)
 
         val decks = database.deckDao().listAll()
         val cards = database.cardDao().listAll()
@@ -74,16 +85,70 @@ class DebugViewModelIntegrationTest {
     }
 
     /**
-     * 轮询等待生成完成，可以让测试只依赖最终状态，
+     * 调试页写入和清空都必须补 journal，
+     * 否则两台 debug 构建设备即使配对成功，也无法通过局域网同步收敛到同一批测试数据。
+     */
+    @Test
+    fun generateRandomData_andClearDebugData_recordSyncJournal() = runBlocking {
+        val viewModel = DebugViewModel(
+            database = database,
+            dispatchers = DefaultAppDispatchers(),
+            timeProvider = FixedTimeProvider(nowEpochMillis = 1_000_000L),
+            syncChangeRecorder = syncChangeRecorder
+        )
+
+        viewModel.generateRandomData()
+        waitForIdle(viewModel = viewModel)
+
+        val decks = database.deckDao().listAll()
+        val cards = database.cardDao().listAll()
+        val questions = database.questionDao().listAll()
+        val reviewRecords = database.reviewRecordDao().listAll()
+        val generatedChanges = database.syncChangeDao().listAfter(afterSeq = 0L)
+
+        assertEquals(decks.size, generatedChanges.countChange(SyncEntityType.DECK, SyncChangeOperation.UPSERT))
+        assertEquals(cards.size, generatedChanges.countChange(SyncEntityType.CARD, SyncChangeOperation.UPSERT))
+        assertEquals(questions.size, generatedChanges.countChange(SyncEntityType.QUESTION, SyncChangeOperation.UPSERT))
+        assertEquals(
+            reviewRecords.size,
+            generatedChanges.countChange(SyncEntityType.REVIEW_RECORD, SyncChangeOperation.UPSERT)
+        )
+
+        viewModel.clearDebugData()
+        waitForIdle(viewModel = viewModel)
+
+        val allChanges = database.syncChangeDao().listAfter(afterSeq = 0L)
+
+        assertEquals(0, database.deckDao().listAll().size)
+        assertEquals(0, database.cardDao().listAll().size)
+        assertEquals(0, database.questionDao().listAll().size)
+        assertEquals(0, database.reviewRecordDao().listAll().size)
+        assertEquals(questions.size, allChanges.countChange(SyncEntityType.QUESTION, SyncChangeOperation.DELETE))
+        assertEquals(cards.size, allChanges.countChange(SyncEntityType.CARD, SyncChangeOperation.DELETE))
+        assertEquals(decks.size, allChanges.countChange(SyncEntityType.DECK, SyncChangeOperation.DELETE))
+    }
+
+    /**
+     * 轮询等待空闲态，可以让测试只依赖最终状态，
      * 而不是和 ViewModel 内部协程调度细节强耦合。
      */
-    private suspend fun waitForGeneration(viewModel: DebugViewModel) {
+    private suspend fun waitForIdle(viewModel: DebugViewModel) {
         repeat(50) {
-            if (!viewModel.uiState.value.isGenerating) return
+            if (!viewModel.uiState.value.isGenerating && !viewModel.uiState.value.isClearing) return
             delay(100)
         }
-        error("等待随机数据生成超时。")
+        error("等待调试数据操作完成超时。")
     }
+}
+
+/**
+ * 变更统计辅助函数收在测试文件内，是为了让断言保留“按实体类型和操作验证 journal”的意图而不是淹没在筛选样板里。
+ */
+private fun List<com.kariscode.yike.data.local.db.entity.SyncChangeEntity>.countChange(
+    entityType: SyncEntityType,
+    operation: SyncChangeOperation
+): Int = count { change ->
+    change.entityType == entityType.name && change.operation == operation.name
 }
 
 /**

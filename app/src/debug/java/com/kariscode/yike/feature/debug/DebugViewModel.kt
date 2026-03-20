@@ -12,6 +12,9 @@ import com.kariscode.yike.data.local.db.entity.CardEntity
 import com.kariscode.yike.data.local.db.entity.DeckEntity
 import com.kariscode.yike.data.local.db.entity.QuestionEntity
 import com.kariscode.yike.data.local.db.entity.ReviewRecordEntity
+import com.kariscode.yike.data.mapper.toDomain
+import com.kariscode.yike.data.sync.LanSyncChangeRecorder
+import com.kariscode.yike.domain.model.SyncEntityType
 import com.kariscode.yike.domain.model.ReviewRating
 import com.kariscode.yike.domain.scheduler.ReviewSchedulerV1
 import java.util.UUID
@@ -65,7 +68,8 @@ private data class DebugGenerationSummary(
 class DebugViewModel(
     private val database: YikeDatabase,
     private val dispatchers: AppDispatchers,
-    private val timeProvider: TimeProvider
+    private val timeProvider: TimeProvider,
+    private val syncChangeRecorder: LanSyncChangeRecorder
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(DebugUiState())
     val uiState: StateFlow<DebugUiState> = _uiState.asStateFlow()
@@ -236,6 +240,12 @@ class DebugViewModel(
                 cardDao.upsertAll(cards)
                 questionDao.upsertAll(questions)
                 reviewRecordDao.insertAll(reviewRecords)
+                recordGeneratedSyncChanges(
+                    decks = decks,
+                    cards = cards,
+                    questions = questions,
+                    reviewRecords = reviewRecords
+                )
             }
 
             DebugGenerationSummary(
@@ -249,11 +259,79 @@ class DebugViewModel(
      * 按层级自底向上清空业务表，是为了让外键约束始终由数据库自然维护，而不是依赖调用侧猜测顺序。
      */
     private suspend fun clearAllData() = withContext(dispatchers.io) {
+        val deckDao = database.deckDao()
+        val cardDao = database.cardDao()
+        val questionDao = database.questionDao()
         database.withTransaction {
+            val existingDecks = deckDao.listAll()
+            val existingCards = cardDao.listAll()
+            val existingQuestions = questionDao.listAll()
             database.reviewRecordDao().clearAll()
-            database.questionDao().clearAll()
-            database.cardDao().clearAll()
-            database.deckDao().clearAll()
+            questionDao.clearAll()
+            cardDao.clearAll()
+            deckDao.clearAll()
+            recordClearedSyncChanges(
+                decks = existingDecks,
+                cards = existingCards,
+                questions = existingQuestions
+            )
+        }
+    }
+
+    /**
+     * 调试造数补写同步 journal，是为了让 debug 页面产生的数据与正式编辑路径共享同一套增量同步语义。
+     */
+    private suspend fun recordGeneratedSyncChanges(
+        decks: List<DeckEntity>,
+        cards: List<CardEntity>,
+        questions: List<QuestionEntity>,
+        reviewRecords: List<ReviewRecordEntity>
+    ) {
+        decks.forEach { deck ->
+            syncChangeRecorder.recordDeckUpsert(deck.toDomain())
+        }
+        cards.forEach { card ->
+            syncChangeRecorder.recordCardUpsert(card.toDomain())
+        }
+        questions.forEach { question ->
+            syncChangeRecorder.recordQuestionUpsert(question.toDomain())
+        }
+        reviewRecords.forEach { reviewRecord ->
+            syncChangeRecorder.recordReviewRecordInsert(reviewRecord.toDomain())
+        }
+    }
+
+    /**
+     * 清空调试数据后补齐删除 tombstone，是为了让另一台设备也能沿用既有级联删除规则收敛到相同空态。
+     */
+    private suspend fun recordClearedSyncChanges(
+        decks: List<DeckEntity>,
+        cards: List<CardEntity>,
+        questions: List<QuestionEntity>
+    ) {
+        questions.forEach { question ->
+            syncChangeRecorder.recordDelete(
+                entityType = SyncEntityType.QUESTION,
+                entityId = question.id,
+                summary = question.prompt.take(MAX_SUMMARY_LENGTH),
+                modifiedAt = question.updatedAt
+            )
+        }
+        cards.forEach { card ->
+            syncChangeRecorder.recordDelete(
+                entityType = SyncEntityType.CARD,
+                entityId = card.id,
+                summary = card.title,
+                modifiedAt = card.updatedAt
+            )
+        }
+        decks.forEach { deck ->
+            syncChangeRecorder.recordDelete(
+                entityType = SyncEntityType.DECK,
+                entityId = deck.id,
+                summary = deck.name,
+                modifiedAt = deck.updatedAt
+            )
         }
     }
 
@@ -375,18 +453,22 @@ class DebugViewModel(
     }
 
     companion object {
+        private const val MAX_SUMMARY_LENGTH: Int = 48
+
         /**
          * 调试页仍通过工厂拿依赖，原因是这样可以沿用现有页面的装配方式并保持可测试性。
          */
         fun factory(
             database: YikeDatabase,
             dispatchers: AppDispatchers,
-            timeProvider: TimeProvider
+            timeProvider: TimeProvider,
+            syncChangeRecorder: LanSyncChangeRecorder
         ): ViewModelProvider.Factory = typedViewModelFactory {
             DebugViewModel(
                 database = database,
                 dispatchers = dispatchers,
-                timeProvider = timeProvider
+                timeProvider = timeProvider,
+                syncChangeRecorder = syncChangeRecorder
             )
         }
     }

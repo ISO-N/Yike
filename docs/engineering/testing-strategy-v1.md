@@ -151,6 +151,7 @@
   - `androidTest/data/local/db/YikeDatabaseIntegrationTest.kt`
   - `androidTest/feature/FeatureContentTest.kt`
   - `androidTest/feature/debug/DebugViewModelIntegrationTest.kt`
+    - 覆盖随机造数后的层级落库、同步 journal 写入，以及清空调试数据后的删除 tombstone
 
 ---
 
