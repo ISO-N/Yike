@@ -130,6 +130,40 @@ class QuestionEditorViewModelTest {
     }
 
     /**
+     * 自动保存必须防抖，只保存最后一次输入，
+     * 否则连续打字会产生大量无意义磁盘写入并增加退出时的竞态风险。
+     */
+    @Test
+    fun onQuestionPromptChange_debouncesAutoSaveAndPersistsLatestSnapshot() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(dispatcher)
+        try {
+            val draftRepository = FakeQuestionEditorDraftRepository()
+            val viewModel = createViewModel(draftRepository = draftRepository)
+            advanceUntilIdle()
+
+            viewModel.onAddQuestionClick()
+            val draftId = viewModel.uiState.value.questions.single().id
+            viewModel.onQuestionPromptChange(draftId, "第一版")
+            advanceTimeBy(1_000L)
+            viewModel.onQuestionPromptChange(draftId, "最终版")
+            advanceTimeBy(1_499L)
+
+            assertTrue(draftRepository.savedDrafts.isEmpty())
+
+            advanceTimeBy(1L)
+            advanceUntilIdle()
+
+            assertEquals(1, draftRepository.savedDrafts.size)
+            assertEquals("最终版", draftRepository.savedDrafts.single().questions.single().prompt)
+            assertFalse(viewModel.uiState.value.hasPendingDraftChanges)
+            assertTrue(viewModel.uiState.value.hasUnsavedChanges)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    /**
      * 手动保存草稿应该只写本地草稿而不写正式仓储，
      * 这样用户才能明确区分“暂存进度”和“正式生效”两个动作。
      */
@@ -154,6 +188,34 @@ class QuestionEditorViewModelTest {
             assertEquals("新的卡片标题", draftRepository.savedDrafts.single().title)
             assertTrue(questionRepository.upsertCalls.isEmpty())
             assertEquals(SuccessMessages.DRAFT_SAVED, viewModel.uiState.value.message)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    /**
+     * 返回前补存草稿后再导航，是为了保证用户即使忘记点“保存草稿”也不会丢掉最后一次编辑。
+     */
+    @Test
+    fun onExitAttempt_persistsPendingDraftThenEmitsNavigateBack() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(dispatcher)
+        try {
+            val effects = mutableListOf<QuestionEditorEffect>()
+            val draftRepository = FakeQuestionEditorDraftRepository()
+            val viewModel = createViewModel(draftRepository = draftRepository)
+            val effectJob = launch { viewModel.effects.collect { effect -> effects += effect } }
+            advanceUntilIdle()
+
+            viewModel.onDescriptionChange("准备离开前的说明")
+            viewModel.onExitAttempt()
+            advanceUntilIdle()
+
+            assertEquals(1, draftRepository.savedDrafts.size)
+            assertEquals("准备离开前的说明", draftRepository.savedDrafts.single().description)
+            assertEquals(listOf(QuestionEditorEffect.NavigateBack), effects)
+
+            effectJob.cancel()
         } finally {
             Dispatchers.resetMain()
         }

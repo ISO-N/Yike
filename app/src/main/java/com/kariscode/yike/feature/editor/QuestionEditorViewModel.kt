@@ -20,11 +20,25 @@ import com.kariscode.yike.domain.repository.CardRepository
 import com.kariscode.yike.domain.repository.QuestionEditorDraftRepository
 import com.kariscode.yike.domain.repository.QuestionRepository
 import com.kariscode.yike.domain.scheduler.InitialDueAtCalculator
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/**
+ * 编辑页通过 effect 发出一次性返回动作，是为了让“先落草稿再离开”这类瞬时行为不污染持续 UI 状态。
+ */
+sealed interface QuestionEditorEffect {
+    data object NavigateBack : QuestionEditorEffect
+}
 
 /**
  * 编辑页 ViewModel 负责把“表单草稿 -> 本地草稿恢复 -> 领域模型 -> 仓储写入”收敛到单一位置，
@@ -60,10 +74,14 @@ class QuestionEditorViewModel(
     )
     val uiState: StateFlow<QuestionEditorUiState> = _uiState.asStateFlow()
 
+    private val _effects = MutableSharedFlow<QuestionEditorEffect>(extraBufferCapacity = 1)
+    val effects: SharedFlow<QuestionEditorEffect> = _effects.asSharedFlow()
+
     private var loadedCard: Card? = null
     private var loadedQuestionsById: Map<String, Question> = emptyMap()
     private val deletedQuestionIds = linkedSetOf<String>()
     private var pendingRestoreDraftSnapshot: QuestionEditorDraftSnapshot? = null
+    private var draftSaveJob: Job? = null
 
     init {
         /**
@@ -145,31 +163,7 @@ class QuestionEditorViewModel(
      * 手动保存草稿提供显式心理预期，是为了让用户在长时间编辑前能够主动确认“这份内容已经落在本机”。
      */
     fun onSaveDraftClick() {
-        launchResult(
-            action = {
-                persistCurrentDraft()
-            },
-            onSuccess = { savedAt ->
-                _uiState.update { state ->
-                    state.copy(
-                        isDraftSaving = false,
-                        hasPendingDraftChanges = false,
-                        lastDraftSavedAt = savedAt,
-                        message = SuccessMessages.DRAFT_SAVED,
-                        errorMessage = null
-                    )
-                }
-            },
-            onFailure = {
-                _uiState.update { state ->
-                    state.copy(
-                        isDraftSaving = false,
-                        message = null,
-                        errorMessage = ErrorMessages.DRAFT_SAVE_FAILED
-                    )
-                }
-            }
-        )
+        requestDraftSave(showSuccessMessage = true)
     }
 
     /**
@@ -177,6 +171,7 @@ class QuestionEditorViewModel(
      */
     fun onRestoreDraftConfirm() {
         val snapshot = pendingRestoreDraftSnapshot ?: return
+        draftSaveJob?.cancel()
         deletedQuestionIds.clear()
         deletedQuestionIds.addAll(snapshot.deletedQuestionIds)
         pendingRestoreDraftSnapshot = null
@@ -203,6 +198,7 @@ class QuestionEditorViewModel(
     fun onDiscardDraftConfirm() {
         launchResult(
             action = {
+                cancelPendingDraftSave()
                 questionEditorDraftRepository.deleteDraft(cardId)
             },
             onSuccess = {
@@ -273,6 +269,7 @@ class QuestionEditorViewModel(
         }
         launchResult(
             action = {
+                cancelPendingDraftSave()
                 persistOfficialChanges(
                     state = state,
                     card = card,
@@ -292,6 +289,31 @@ class QuestionEditorViewModel(
                 }
             }
         )
+    }
+
+    /**
+     * 返回时优先补存最新草稿，是为了把“离开页面”从数据风险操作降成可恢复的普通导航动作。
+     */
+    fun onExitAttempt() {
+        val state = _uiState.value
+        if (state.isLoading || state.isSaving || state.restoreDraftDialogVisible) {
+            return
+        }
+        if (!state.hasPendingDraftChanges) {
+            _effects.tryEmit(QuestionEditorEffect.NavigateBack)
+            return
+        }
+        requestDraftSave(showSuccessMessage = false, navigateAfterSaving = true)
+    }
+
+    /**
+     * 页面进入后台时补存一次，是为了覆盖用户切应用、锁屏或系统回收前最后几次尚未触发防抖的输入。
+     */
+    fun onBackgrounded() {
+        if (!_uiState.value.hasPendingDraftChanges || _uiState.value.restoreDraftDialogVisible || _uiState.value.isSaving) {
+            return
+        }
+        requestDraftSave(showSuccessMessage = false)
     }
 
     /**
@@ -396,6 +418,7 @@ class QuestionEditorViewModel(
                 errorMessage = null
             )
         }
+        scheduleAutoDraftSave()
     }
 
     /**
@@ -415,23 +438,91 @@ class QuestionEditorViewModel(
     }
 
     /**
+     * 自动保存采用防抖，是为了在连续输入时减少磁盘写入，同时继续保障最近一版内容能落到本机。
+     */
+    private fun scheduleAutoDraftSave() {
+        if (!shouldPersistCurrentDraft()) {
+            return
+        }
+        draftSaveJob?.cancel()
+        draftSaveJob = viewModelScope.launch {
+            delay(AUTO_SAVE_DELAY_MILLIS)
+            persistCurrentDraft(showSuccessMessage = false, navigateAfterSaving = false)
+        }
+    }
+
+    /**
+     * 显式保存和离开前补存都走同一保存入口，是为了保证手动、自动和导航场景下的草稿内容完全一致。
+     */
+    private fun requestDraftSave(
+        showSuccessMessage: Boolean,
+        navigateAfterSaving: Boolean = false
+    ) {
+        if (!shouldPersistCurrentDraft()) {
+            if (navigateAfterSaving) {
+                _effects.tryEmit(QuestionEditorEffect.NavigateBack)
+            }
+            return
+        }
+        draftSaveJob?.cancel()
+        draftSaveJob = viewModelScope.launch {
+            persistCurrentDraft(
+                showSuccessMessage = showSuccessMessage,
+                navigateAfterSaving = navigateAfterSaving
+            )
+        }
+    }
+
+    /**
      * 草稿保存完成后只清空“待落盘”的标记，不清空“未正式保存”的标记，
      * 是为了让页面继续准确表达“本地可恢复”和“数据库已提交”这两个不同层次。
      */
-    private suspend fun persistCurrentDraft(): Long {
+    private suspend fun persistCurrentDraft(
+        showSuccessMessage: Boolean,
+        navigateAfterSaving: Boolean
+    ) {
         if (!shouldPersistCurrentDraft()) {
-            return _uiState.value.lastDraftSavedAt ?: timeProvider.nowEpochMillis()
+            if (navigateAfterSaving) {
+                _effects.tryEmit(QuestionEditorEffect.NavigateBack)
+            }
+            return
         }
         _uiState.update { state ->
             state.copy(
                 isDraftSaving = true,
                 errorMessage = null,
-                message = null
+                message = if (showSuccessMessage) null else state.message
             )
         }
-        val snapshot = buildDraftSnapshot()
-        questionEditorDraftRepository.saveDraft(snapshot)
-        return snapshot.savedAt
+        runCatching {
+            val snapshot = buildDraftSnapshot()
+            questionEditorDraftRepository.saveDraft(snapshot)
+            snapshot.savedAt
+        }.onSuccess { savedAt ->
+            _uiState.update { state ->
+                state.copy(
+                    isDraftSaving = false,
+                    hasPendingDraftChanges = false,
+                    lastDraftSavedAt = savedAt,
+                    message = if (showSuccessMessage) SuccessMessages.DRAFT_SAVED else state.message,
+                    errorMessage = null
+                )
+            }
+            if (navigateAfterSaving) {
+                _effects.tryEmit(QuestionEditorEffect.NavigateBack)
+            }
+        }.onFailure { throwable ->
+            if (throwable is CancellationException) {
+                throw throwable
+            }
+            _uiState.update { state ->
+                state.copy(
+                    isDraftSaving = false,
+                    message = null,
+                    errorMessage = ErrorMessages.DRAFT_SAVE_FAILED
+                )
+            }
+        }
     }
 
     /**
@@ -464,6 +555,14 @@ class QuestionEditorViewModel(
         deletedQuestionIds = deletedQuestionIds.toList(),
         savedAt = timeProvider.nowEpochMillis()
     )
+
+    /**
+     * 正式保存和放弃草稿前先取消待执行的落盘任务，是为了避免旧协程在稍后把已经无效的草稿重新写回磁盘。
+     */
+    private suspend fun cancelPendingDraftSave() {
+        draftSaveJob?.cancelAndJoin()
+        draftSaveJob = null
+    }
 
     /**
      * 正式问题统一映射为编辑草稿，是为了让首次载入和正式保存后的回填共享同一份字段转换语义。
@@ -532,6 +631,8 @@ class QuestionEditorViewModel(
     }
 
     companion object {
+        private const val AUTO_SAVE_DELAY_MILLIS = 1_500L
+
         /**
          * 工厂通过路由参数注入 cardId/deckId，并注入仓储与时间依赖，
          * 以保持 ViewModel 与 Android framework 解耦。

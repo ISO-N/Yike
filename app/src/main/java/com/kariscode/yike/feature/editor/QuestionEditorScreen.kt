@@ -1,5 +1,6 @@
 package com.kariscode.yike.feature.editor
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,12 +10,17 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kariscode.yike.app.LocalAppContainer
 import com.kariscode.yike.navigation.YikeNavigator
+import com.kariscode.yike.ui.component.CollectFlowEffect
 import com.kariscode.yike.ui.component.YikeBadge
 import com.kariscode.yike.ui.component.YikeFlowScaffold
 import com.kariscode.yike.ui.component.YikeHeaderBlock
@@ -50,13 +56,43 @@ fun QuestionEditorScreen(
         )
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    /**
+     * 返回键和顶部返回统一走 ViewModel，是为了确保导航离开前始终先执行同一套草稿补存语义。
+     */
+    BackHandler(onBack = viewModel::onExitAttempt)
+
+    /**
+     * 返回导航通过 effect 发出，是为了让“先补存，再离开”不会在状态里留下额外的一次性标记。
+     */
+    CollectFlowEffect(effectFlow = viewModel.effects) { effect ->
+        when (effect) {
+            QuestionEditorEffect.NavigateBack -> navigator.back()
+        }
+    }
+
+    /**
+     * 页面进入后台时触发补存，是为了覆盖系统回收和用户切应用前那段来不及等防抖结束的输入窗口。
+     */
+    DisposableEffect(lifecycleOwner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                viewModel.onBackgrounded()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     YikeFlowScaffold(
         title = "编辑卡片",
         subtitle = "先把卡片信息写清楚，再逐条维护问题和答案。",
-        navigationAction = backNavigationAction(onClick = navigator::back),
+        navigationAction = backNavigationAction(onClick = viewModel::onExitAttempt),
         actionText = if (uiState.isDraftSaving) "草稿保存中" else "保存草稿",
-        onActionClick = if (uiState.hasUnsavedChanges && !uiState.isSaving && !uiState.isDraftSaving) {
+        onActionClick = if (uiState.hasPendingDraftChanges && !uiState.isSaving && !uiState.isDraftSaving) {
             viewModel::onSaveDraftClick
         } else {
             null
