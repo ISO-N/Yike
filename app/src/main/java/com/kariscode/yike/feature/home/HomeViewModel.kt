@@ -2,7 +2,6 @@ package com.kariscode.yike.feature.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewModelScope
 import com.kariscode.yike.core.coroutine.parallel
 import com.kariscode.yike.core.message.ErrorMessages
 import com.kariscode.yike.core.message.userMessageOr
@@ -17,7 +16,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
+
+/**
+ * 首页内容模式需要直接表达“今天该复习 / 今天已清空 / 还没有内容”，
+ * 否则 UI 很容易把“无任务”和“无数据”混成同一种空态。
+ */
+enum class HomeContentMode {
+    REVIEW_READY,
+    REVIEW_CLEARED,
+    CONTENT_EMPTY
+}
 
 /**
  * 首页状态显式区分加载/成功/错误，并补充最近卡组入口，
@@ -25,8 +33,9 @@ import kotlinx.coroutines.launch
  */
 data class HomeUiState(
     val isLoading: Boolean,
-    val summary: TodayReviewSummary?,
+    val summary: TodayReviewSummary,
     val recentDecks: List<DeckSummary>,
+    val contentMode: HomeContentMode,
     val errorMessage: String?
 )
 
@@ -42,8 +51,12 @@ class HomeViewModel(
     private val _uiState = MutableStateFlow(
         HomeUiState(
             isLoading = true,
-            summary = null,
+            summary = TodayReviewSummary(
+                dueCardCount = 0,
+                dueQuestionCount = 0
+            ),
             recentDecks = emptyList(),
+            contentMode = HomeContentMode.CONTENT_EMPTY,
             errorMessage = null
         )
     )
@@ -76,20 +89,17 @@ class HomeViewModel(
             },
             onSuccess = { (summary, recentDecks) ->
                 _uiState.update {
-                    it.copy(
-                        isLoading = false,
+                    HomeStateFactory.success(
+                        state = it,
                         summary = summary,
-                        recentDecks = recentDecks,
-                        errorMessage = null
+                        recentDecks = recentDecks
                     )
                 }
             },
             onFailure = { throwable ->
                 _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        summary = null,
-                        recentDecks = emptyList(),
+                    HomeStateFactory.loadFailed(
+                        state = it,
                         errorMessage = throwable.userMessageOr(ErrorMessages.HOME_LOAD_FAILED)
                     )
                 }

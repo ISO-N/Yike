@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -109,16 +108,15 @@ fun HomeContent(
             }
 
             else -> {
-                val summary = uiState.summary
-                val dueQuestions = summary?.dueQuestionCount ?: 0
-                val dueCards = summary?.dueCardCount ?: 0
                 HomeHeroSection(
-                    dueCards = dueCards,
-                    dueQuestions = dueQuestions,
+                    contentMode = uiState.contentMode,
+                    dueCards = uiState.summary.dueCardCount,
+                    dueQuestions = uiState.summary.dueQuestionCount,
                     navigator = navigator
                 )
                 HomeRhythmSection(
-                    dueQuestions = dueQuestions,
+                    contentMode = uiState.contentMode,
+                    dueQuestions = uiState.summary.dueQuestionCount,
                     totalRecentDecks = uiState.recentDecks.size,
                     navigator = navigator
                 )
@@ -143,21 +141,23 @@ fun HomeContent(
  */
 @Composable
 private fun HomeHeroSection(
+    contentMode: HomeContentMode,
     dueCards: Int,
     dueQuestions: Int,
     navigator: YikeNavigator
 ) {
     val spacing = LocalYikeSpacing.current
-    val hasDueItems = dueQuestions > 0
-    val primaryActionText = if (hasDueItems) "开始复习" else "今日预览"
-    val primaryAction: () -> Unit = if (hasDueItems) navigator::openReviewQueue else navigator::openTodayPreview
     YikeHeroCard(
         eyebrow = "Today Review",
-        title = if (hasDueItems) "$dueQuestions 个问题待复习" else "今日暂无待复习",
-        description = if (hasDueItems) {
-            "从最早到期的卡片开始，优先把今天的复习闭环做完。"
-        } else {
-            "今天的复习已经清空，适合去补充新内容或整理已有卡组。"
+        title = when (contentMode) {
+            HomeContentMode.REVIEW_READY -> "$dueQuestions 个问题待复习"
+            HomeContentMode.REVIEW_CLEARED -> "今天的复习已经清空"
+            HomeContentMode.CONTENT_EMPTY -> "先创建第一组学习内容"
+        },
+        description = when (contentMode) {
+            HomeContentMode.REVIEW_READY -> "从最早到期的卡片开始，优先把今天的复习闭环做完。"
+            HomeContentMode.REVIEW_CLEARED -> "今天已经没有到期题目，可以回看今日预览，或继续补充卡组内容。"
+            HomeContentMode.CONTENT_EMPTY -> "目前还没有可进入复习流的内容，先创建卡组和卡片再开始积累。"
         }
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(spacing.md)) {
@@ -173,26 +173,52 @@ private fun HomeHeroSection(
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
-            YikePrimaryButton(
-                text = primaryActionText,
-                onClick = primaryAction,
-                modifier = Modifier.weight(1f)
-            )
-            YikeSecondaryButton(
-                text = "今日预览",
-                onClick = navigator::openTodayPreview,
-                modifier = Modifier.weight(1f)
-            )
+            when (contentMode) {
+                HomeContentMode.REVIEW_READY -> {
+                    YikePrimaryButton(
+                        text = "开始复习",
+                        onClick = navigator::openReviewQueue,
+                        modifier = Modifier.weight(1f)
+                    )
+                    YikeSecondaryButton(
+                        text = "今日预览",
+                        onClick = navigator::openTodayPreview,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                HomeContentMode.REVIEW_CLEARED -> {
+                    YikePrimaryButton(
+                        text = "今日预览",
+                        onClick = navigator::openTodayPreview,
+                        modifier = Modifier.weight(1f)
+                    )
+                    YikeSecondaryButton(
+                        text = "补充内容",
+                        onClick = navigator::openDeckList,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                HomeContentMode.CONTENT_EMPTY -> {
+                    YikePrimaryButton(
+                        text = "创建内容",
+                        onClick = navigator::openDeckList,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
         }
     }
 }
 
 /**
- * 节奏区只基于真实待复习数量给出当前状态说明，
- * 这样即使暂时没有更细粒度统计，也能保持原型要求的状态层级。
+ * 节奏区不再只看题量，而是跟随首页模式切换语气，
+ * 这样“今天完成了”和“还没开始积累内容”会呈现出完全不同的下一步引导。
  */
 @Composable
 private fun HomeRhythmSection(
+    contentMode: HomeContentMode,
     dueQuestions: Int,
     totalRecentDecks: Int,
     navigator: YikeNavigator
@@ -200,18 +226,28 @@ private fun HomeRhythmSection(
     val spacing = LocalYikeSpacing.current
     YikeStateBanner(
         title = "今日节奏",
-        description = if (dueQuestions <= 0) {
-            "今天的待复习已经处理完，可以转去维护卡组和卡片内容。"
-        } else {
-            "当前还有 $dueQuestions 题待处理，建议先完成复习再继续编辑内容。"
+        description = when (contentMode) {
+            HomeContentMode.REVIEW_READY -> "当前还有 $dueQuestions 题待处理，建议先完成复习再继续编辑内容。"
+            HomeContentMode.REVIEW_CLEARED -> "今天的待复习已经处理完，现在适合复盘预览或继续整理内容。"
+            HomeContentMode.CONTENT_EMPTY -> "还没有形成可复习内容，先创建卡组和卡片，之后首页才会出现复习入口。"
         },
         trailing = {
             YikeBadge(
-                text = if (totalRecentDecks > 0) "$totalRecentDecks 个最近卡组" else "暂无最近卡组"
+                text = when {
+                    totalRecentDecks > 0 -> "$totalRecentDecks 个最近卡组"
+                    contentMode == HomeContentMode.CONTENT_EMPTY -> "等待第一个卡组"
+                    else -> "暂无最近卡组"
+                }
             )
         }
     ) {
-        YikeProgressBar(progress = if (dueQuestions <= 0) 1f else 0f)
+        YikeProgressBar(
+            progress = when (contentMode) {
+                HomeContentMode.REVIEW_READY -> 0f
+                HomeContentMode.REVIEW_CLEARED -> 1f
+                HomeContentMode.CONTENT_EMPTY -> 0f
+            }
+        )
         Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
             Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
                 YikeSecondaryButton(
@@ -314,11 +350,11 @@ private fun HomeDebugEntry(
  * 首页主标题使用真实待复习数量驱动，是为了让一级导航壳也能传达当前最重要的信息。
  */
 private fun buildHomeTitle(uiState: HomeUiState): String {
-    val dueQuestions = uiState.summary?.dueQuestionCount ?: 0
-    return if (dueQuestions > 0) {
-        "今天继续巩固 $dueQuestions 个问题"
-    } else {
-        "今天先整理你的学习内容"
+    val dueQuestions = uiState.summary.dueQuestionCount
+    return when (uiState.contentMode) {
+        HomeContentMode.REVIEW_READY -> "今天继续巩固 $dueQuestions 个问题"
+        HomeContentMode.REVIEW_CLEARED -> "今天的复习已经完成"
+        HomeContentMode.CONTENT_EMPTY -> "今天先建立你的第一组内容"
     }
 }
 
@@ -328,6 +364,7 @@ private fun buildHomeTitle(uiState: HomeUiState): String {
 private fun buildHomeSubtitle(uiState: HomeUiState): String = when {
     uiState.isLoading -> "正在汇总待复习内容和最近卡组。"
     uiState.errorMessage != null -> "暂时没能拿到完整数据，但你仍可以继续进入内容管理。"
-    (uiState.summary?.dueQuestionCount ?: 0) > 0 -> "优先从最早到期的卡片开始，减少今天的拖延成本。"
-    else -> "复习入口已经清空，现在最值得做的是补齐新的卡组与卡片。"
+    uiState.contentMode == HomeContentMode.REVIEW_READY -> "优先从最早到期的卡片开始，减少今天的拖延成本。"
+    uiState.contentMode == HomeContentMode.REVIEW_CLEARED -> "待复习入口已经清空，现在适合补充新内容或回看今日预览。"
+    else -> "先创建卡组和卡片，首页才会开始积累真实复习节奏。"
 }
