@@ -3,6 +3,7 @@ package com.kariscode.yike.feature.editor
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import com.kariscode.yike.ui.theme.YikeTheme
 import org.junit.Rule
 import org.junit.Test
@@ -86,7 +87,7 @@ class QuestionEditorContentTest {
         }
 
         composeRule.onNodeWithText("草稿已保存到本机").assertIsDisplayed()
-        composeRule.onNodeWithText("保存修改").assertIsDisplayed()
-        composeRule.onNodeWithText("添加问题").assertIsDisplayed()
+        composeRule.onNodeWithText("保存修改").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("添加问题").performScrollTo().assertIsDisplayed()
     }
 }
