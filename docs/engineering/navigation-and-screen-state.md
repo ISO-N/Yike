@@ -157,13 +157,17 @@ debug
 
 ```text
 isLoading: Boolean
-todayDueCardCount: Int
-todayDueQuestionCount: Int
-hasReviewTask: Boolean
+summary: TodayReviewSummary
 recentDecks: List<DeckSummaryUiModel>
-message: String?
-error: HomeError?
+contentMode: HomeContentMode
+errorMessage: String?
 ```
+
+其中 `HomeContentMode` 建议至少区分：
+
+- `REVIEW_READY`：今天仍有待复习题目
+- `REVIEW_CLEARED`：今天题目已清空，但仍有可继续维护的内容
+- `CONTENT_EMPTY`：还没有建立任何可进入复习流的内容
 
 ### 7.3 页面状态
 
@@ -171,10 +175,15 @@ error: HomeError?
 
 - 显示概览占位
 
-#### Empty
+#### Empty - 已完成今日复习
 
-- 显示“今日暂无待复习”
-- 提供进入卡组管理或创建内容的引导
+- 显示“今天的复习已经清空”
+- 提供“今日预览 / 补充内容”的后续动作
+
+#### Empty - 尚未建立内容
+
+- 显示“先创建第一组学习内容”
+- 提供进入卡组管理的引导
 
 #### Error
 
@@ -450,6 +459,7 @@ error: ReviewError?
 
 - 若未评分直接退出，当前题不计完成
 - 若已评分后退出，进度已持久化
+- 若 `cardId` 或题目已失效，应优先提示“目标内容不存在或已失效”，而不是统一归入笼统加载失败
 
 ---
 

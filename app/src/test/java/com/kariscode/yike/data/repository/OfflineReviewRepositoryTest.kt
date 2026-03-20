@@ -10,6 +10,7 @@ import com.kariscode.yike.data.local.db.entity.QuestionEntity
 import com.kariscode.yike.data.sync.InMemorySyncChangeDao
 import com.kariscode.yike.data.sync.createInspectableTestSyncRecorder
 import com.kariscode.yike.data.sync.storageValue
+import com.kariscode.yike.domain.error.QuestionNotFoundException
 import com.kariscode.yike.domain.model.ReviewRating
 import com.kariscode.yike.domain.model.SyncChangeOperation
 import com.kariscode.yike.domain.model.SyncEntityType
@@ -332,7 +333,7 @@ class OfflineReviewRepositoryTest {
     /**
      * 提交评分时如果 questionId 不存在，应抛出异常而非静默失败。
      */
-    @Test(expected = IllegalStateException::class)
+    @Test(expected = QuestionNotFoundException::class)
     fun submitRating_nonExistentQuestion_throwsException() = runTest {
         seedHierarchy(deckId = "deck_1", cardId = "card_1")
 

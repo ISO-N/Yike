@@ -10,6 +10,7 @@ import com.kariscode.yike.data.local.db.entity.QuestionEntity
 import com.kariscode.yike.data.mapper.toDomain
 import com.kariscode.yike.data.mapper.toEntity
 import com.kariscode.yike.data.sync.LanSyncChangeRecorder
+import com.kariscode.yike.domain.error.QuestionNotFoundException
 import com.kariscode.yike.domain.model.Question
 import com.kariscode.yike.domain.model.ReviewRating
 import com.kariscode.yike.domain.model.ReviewRecord
@@ -55,7 +56,7 @@ class OfflineReviewRepository(
     ): ReviewSubmission = withContext(dispatchers.io) {
         database.withTransaction {
             val currentEntity = questionDao.findById(questionId)
-                ?: error("问题不存在，无法提交评分。")
+                ?: throw QuestionNotFoundException(questionId)
             val currentQuestion = currentEntity.toDomain()
             val intervalStepCount = questionDao.findDeckIntervalStepCountByQuestionId(questionId)
                 ?: ReviewSchedulerV1.DEFAULT_INTERVAL_STEP_COUNT

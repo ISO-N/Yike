@@ -5,9 +5,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.kariscode.yike.core.coroutine.parallel
 import com.kariscode.yike.core.message.ErrorMessages
+import com.kariscode.yike.core.message.userMessageOr
 import com.kariscode.yike.core.time.TimeProvider
 import com.kariscode.yike.core.viewmodel.launchResult
 import com.kariscode.yike.core.viewmodel.typedViewModelFactory
+import com.kariscode.yike.domain.error.CardNotFoundException
 import com.kariscode.yike.domain.model.ReviewRating
 import com.kariscode.yike.domain.repository.CardRepository
 import com.kariscode.yike.domain.repository.ReviewRepository
@@ -113,7 +115,7 @@ class ReviewCardViewModel(
             action = {
                 val now = timeProvider.nowEpochMillis()
                 parallel(
-                    first = { cardRepository.findById(cardId) ?: error(ErrorMessages.CARD_NOT_FOUND) },
+                    first = { cardRepository.findById(cardId) ?: throw CardNotFoundException(cardId) },
                     second = { reviewRepository.listDueQuestionsByCard(cardId = cardId, nowEpochMillis = now) }
                 )
             },
@@ -146,11 +148,11 @@ class ReviewCardViewModel(
                     }
                 }
             },
-            onFailure = {
+            onFailure = { throwable ->
                 _uiState.update { state ->
                     state.copy(
                         isLoading = false,
-                        errorMessage = ErrorMessages.REVIEW_LOAD_FAILED
+                        errorMessage = throwable.userMessageOr(ErrorMessages.REVIEW_LOAD_FAILED)
                     )
                 }
             }

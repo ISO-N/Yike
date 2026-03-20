@@ -254,6 +254,10 @@ private fun RatingSection(
     onRate: (ReviewRating) -> Unit
 ) {
     val spacing = LocalYikeSpacing.current
+    val againTone = YikeRatingPalette.toneFor(ReviewRating.AGAIN)
+    val hardTone = YikeRatingPalette.toneFor(ReviewRating.HARD)
+    val goodTone = YikeRatingPalette.toneFor(ReviewRating.GOOD)
+    val easyTone = YikeRatingPalette.toneFor(ReviewRating.EASY)
     if (!answerVisible) return
     Column(verticalArrangement = Arrangement.spacedBy(spacing.md)) {
         YikeHeaderBlock(
@@ -264,16 +268,16 @@ private fun RatingSection(
         Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
             YikeRatingButton(
                 text = "完全不会",
-                containerColor = YikeRatingPalette.criticalContainer,
-                contentColor = androidx.compose.ui.graphics.Color(0xFF8C1212),
+                containerColor = againTone.containerColor,
+                contentColor = againTone.contentColor,
                 onClick = { onRate(ReviewRating.AGAIN) },
                 modifier = Modifier.weight(1f),
                 enabled = !isSubmitting
             )
             YikeRatingButton(
                 text = "有印象",
-                containerColor = YikeRatingPalette.warningContainer,
-                contentColor = androidx.compose.ui.graphics.Color(0xFF8C5400),
+                containerColor = hardTone.containerColor,
+                contentColor = hardTone.contentColor,
                 onClick = { onRate(ReviewRating.HARD) },
                 modifier = Modifier.weight(1f),
                 enabled = !isSubmitting
@@ -282,16 +286,16 @@ private fun RatingSection(
         Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
             YikeRatingButton(
                 text = "基本会",
-                containerColor = YikeRatingPalette.successContainer,
-                contentColor = androidx.compose.ui.graphics.Color(0xFF1D6620),
+                containerColor = goodTone.containerColor,
+                contentColor = goodTone.contentColor,
                 onClick = { onRate(ReviewRating.GOOD) },
                 modifier = Modifier.weight(1f),
                 enabled = !isSubmitting
             )
             YikeRatingButton(
                 text = "很轻松",
-                containerColor = YikeRatingPalette.bestContainer,
-                contentColor = androidx.compose.ui.graphics.Color(0xFF005048),
+                containerColor = easyTone.containerColor,
+                contentColor = easyTone.contentColor,
                 onClick = { onRate(ReviewRating.EASY) },
                 modifier = Modifier.weight(1f),
                 enabled = !isSubmitting

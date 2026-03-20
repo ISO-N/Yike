@@ -17,11 +17,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.kariscode.yike.domain.model.ReviewRating
 import com.kariscode.yike.ui.theme.YikeBestContainer
+import com.kariscode.yike.ui.theme.YikeBestContainerDark
 import com.kariscode.yike.ui.theme.YikeCriticalContainer
+import com.kariscode.yike.ui.theme.YikeCriticalContainerDark
+import com.kariscode.yike.ui.theme.YikeSuccessContainerDark
 import com.kariscode.yike.ui.theme.YikeSuccessContainer
+import com.kariscode.yike.ui.theme.YikeWarningContainerDark
 import com.kariscode.yike.ui.theme.YikeWarningContainer
 
 /**
@@ -168,6 +174,15 @@ fun YikeProgressBar(
 }
 
 /**
+ * 评分色板不只决定背景色，还要同时定义前景色，
+ * 这样复习页与统计页都能按同一语义拿到“当前主题下可读”的整组视觉令牌。
+ */
+data class YikeRatingTone(
+    val containerColor: Color,
+    val contentColor: Color
+)
+
+/**
  * 评分色板集中定义，是为了让复习页调用处只表达语义，而不重复散落具体颜色常量。
  */
 object YikeRatingPalette {
@@ -175,5 +190,73 @@ object YikeRatingPalette {
     val warningContainer: Color = YikeWarningContainer
     val successContainer: Color = YikeSuccessContainer
     val bestContainer: Color = YikeBestContainer
+
+    private val criticalContentLight: Color = Color(0xFF8C1212)
+    private val warningContentLight: Color = Color(0xFF8C5400)
+    private val successContentLight: Color = Color(0xFF1D6620)
+    private val bestContentLight: Color = Color(0xFF005048)
+
+    private val criticalContentDark: Color = Color(0xFFFFDAD6)
+    private val warningContentDark: Color = Color(0xFFFFE2B8)
+    private val successContentDark: Color = Color(0xFFC7F1C9)
+    private val bestContentDark: Color = Color(0xFFB8F1E7)
+
+    /**
+     * 复习评分按钮需要随主题切换成对调整前景与背景，
+     * 因此用单一入口基于当前配色亮度推导 tone，避免调用方各自判断深浅色。
+     */
+    @Composable
+    fun toneFor(rating: ReviewRating): YikeRatingTone {
+        val isDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+        return when (rating) {
+            ReviewRating.AGAIN -> if (isDarkTheme) {
+                YikeRatingTone(
+                    containerColor = YikeCriticalContainerDark,
+                    contentColor = criticalContentDark
+                )
+            } else {
+                YikeRatingTone(
+                    containerColor = criticalContainer,
+                    contentColor = criticalContentLight
+                )
+            }
+
+            ReviewRating.HARD -> if (isDarkTheme) {
+                YikeRatingTone(
+                    containerColor = YikeWarningContainerDark,
+                    contentColor = warningContentDark
+                )
+            } else {
+                YikeRatingTone(
+                    containerColor = warningContainer,
+                    contentColor = warningContentLight
+                )
+            }
+
+            ReviewRating.GOOD -> if (isDarkTheme) {
+                YikeRatingTone(
+                    containerColor = YikeSuccessContainerDark,
+                    contentColor = successContentDark
+                )
+            } else {
+                YikeRatingTone(
+                    containerColor = successContainer,
+                    contentColor = successContentLight
+                )
+            }
+
+            ReviewRating.EASY -> if (isDarkTheme) {
+                YikeRatingTone(
+                    containerColor = YikeBestContainerDark,
+                    contentColor = bestContentDark
+                )
+            } else {
+                YikeRatingTone(
+                    containerColor = bestContainer,
+                    contentColor = bestContentLight
+                )
+            }
+        }
+    }
 }
 
