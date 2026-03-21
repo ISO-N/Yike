@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -46,6 +48,7 @@ import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -102,8 +105,8 @@ fun YikePrimaryScaffold(
     content: @Composable (PaddingValues) -> Unit
 ) {
     val navigationBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val contentBottomPadding = navigationBottomPadding + 40.dp
-    val contentBlurOverlayHeight = navigationBottomPadding + 132.dp
+    val contentBottomPadding = navigationBottomPadding + 112.dp
+    val contentBlurOverlayHeight = navigationBottomPadding + 148.dp
     val fabBottomPadding = navigationBottomPadding + 68.dp
     val contentGraphicsLayer = rememberGraphicsLayer()
 
@@ -186,10 +189,9 @@ private fun YikeBottomNavigation(
     Surface(
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        color = Color.Transparent,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
         modifier = modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.58f))
             .border(
                 width = 1.dp,
                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.58f),
@@ -386,12 +388,48 @@ fun YikeScrollableColumn(
     verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(LocalYikeSpacing.current.lg),
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val layoutDirection = LocalLayoutDirection.current
+    val tailHeight = contentPadding.calculateBottomPadding()
     Column(
         modifier = modifier
-            .padding(contentPadding)
+            .padding(
+                start = contentPadding.calculateStartPadding(layoutDirection),
+                top = contentPadding.calculateTopPadding(),
+                end = contentPadding.calculateEndPadding(layoutDirection)
+            )
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = verticalArrangement,
-        content = content
+        verticalArrangement = verticalArrangement
+    ) {
+        content()
+        if (tailHeight > 0.dp) {
+            YikeScrollableTailBlock(height = tailHeight)
+        }
+    }
+}
+
+/**
+ * 滚动内容尾部补一段真实延展块，是为了让悬浮导航覆盖的区域下方仍然属于内容流的一部分，
+ * 而不是只剩一段空白 padding，滚到底时看起来像被硬生生截断。
+ */
+@Composable
+private fun YikeScrollableTailBlock(
+    height: Dp,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.16f),
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.26f)
+                    )
+                ),
+                shape = RoundedCornerShape(28.dp)
+            )
     )
 }
 
