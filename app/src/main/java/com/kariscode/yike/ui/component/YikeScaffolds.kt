@@ -41,10 +41,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -104,6 +110,7 @@ fun YikePrimaryScaffold(
     val contentBottomPadding = navigationBottomPadding + 40.dp
     val contentBlurOverlayHeight = navigationBottomPadding + 132.dp
     val fabBottomPadding = navigationBottomPadding + 68.dp
+    val contentGraphicsLayer = rememberGraphicsLayer()
 
     YikeScreenBackground {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -124,6 +131,7 @@ fun YikePrimaryScaffold(
                     modifier = Modifier
                         .fillMaxSize()
                         .yikeBottomContentBlur(
+                            graphicsLayer = contentGraphicsLayer,
                             overlayHeight = contentBlurOverlayHeight,
                             tintColor = MaterialTheme.colorScheme.surface
                         )
@@ -277,16 +285,33 @@ private fun Modifier.yikeGlassBlur(
  * 因此这里直接对底部一段内容重绘模糊版本，让导航上缘不再像“另起一块底板”。
  */
 private fun Modifier.yikeBottomContentBlur(
+    graphicsLayer: GraphicsLayer,
     overlayHeight: Dp,
     tintColor: Color
 ): Modifier {
     return drawWithContent {
-        drawContent()
+        graphicsLayer.record {
+            this@drawWithContent.drawContent()
+        }
+        drawLayer(graphicsLayer)
         val overlayHeightPx = overlayHeight.toPx().coerceAtMost(size.height)
         if (overlayHeightPx <= 0f) {
             return@drawWithContent
         }
         val overlayTop = size.height - overlayHeightPx
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val previousRenderEffect = graphicsLayer.renderEffect
+            graphicsLayer.renderEffect = BlurEffect(
+                renderEffect = null,
+                radiusX = 20f,
+                radiusY = 20f,
+                edgeTreatment = TileMode.Decal
+            )
+            clipRect(left = 0f, top = overlayTop, right = size.width, bottom = size.height) {
+                drawLayer(graphicsLayer)
+            }
+            graphicsLayer.renderEffect = previousRenderEffect
+        }
         drawRect(
             brush = Brush.verticalGradient(
                 colors = listOf(
