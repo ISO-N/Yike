@@ -99,8 +99,8 @@ fun YikePrimaryScaffold(
     content: @Composable (PaddingValues) -> Unit
 ) {
     val navigationBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val contentBottomPadding = navigationBottomPadding + 88.dp
-    val fabBottomPadding = navigationBottomPadding + 76.dp
+    val contentBottomPadding = navigationBottomPadding + 56.dp
+    val fabBottomPadding = navigationBottomPadding + 68.dp
 
     YikeScreenBackground {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -149,7 +149,7 @@ fun YikePrimaryNavigationChrome(
 ) {
     val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val navigationBottomOffset = navigationBarPadding + 2.dp
-    val bottomGlassHeight = navigationBarPadding + 68.dp
+    val bottomGlassHeight = navigationBottomOffset + 54.dp
 
     Box(modifier = modifier.fillMaxSize()) {
         YikeBottomGlassLayer(
