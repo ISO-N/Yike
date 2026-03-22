@@ -140,6 +140,51 @@ interface QuestionDao {
     suspend fun listTagsJson(activeStatus: String): List<String>
 
     /**
+     * 练习模式必须忽略 due，只按未归档层级、active 状态与用户选择范围读取，
+     * 这样才能从数据库层面保证“主动练习不受正式调度限制”。
+     */
+    @Query(
+        """
+        SELECT
+            q.id AS id,
+            q.cardId AS cardId,
+            q.prompt AS prompt,
+            q.answer AS answer,
+            q.tagsJson AS tagsJson,
+            q.status AS status,
+            q.stageIndex AS stageIndex,
+            q.dueAt AS dueAt,
+            q.lastReviewedAt AS lastReviewedAt,
+            q.reviewCount AS reviewCount,
+            q.lapseCount AS lapseCount,
+            q.createdAt AS createdAt,
+            q.updatedAt AS updatedAt,
+            c.deckId AS deckId,
+            d.name AS deckName,
+            c.title AS cardTitle
+        FROM question q
+        JOIN card c ON c.id = q.cardId
+        JOIN deck d ON d.id = c.deckId
+        WHERE d.archived = 0
+          AND c.archived = 0
+          AND q.status = :activeStatus
+          AND (:includeAllDecks = 1 OR c.deckId IN (:deckIds))
+          AND (:includeAllCards = 1 OR q.cardId IN (:cardIds))
+          AND (:includeAllQuestions = 1 OR q.id IN (:questionIds))
+        ORDER BY d.sortOrder ASC, d.createdAt ASC, d.id ASC, c.sortOrder ASC, c.createdAt ASC, c.id ASC, q.createdAt ASC, q.id ASC
+        """
+    )
+    suspend fun listPracticeQuestionContexts(
+        activeStatus: String,
+        includeAllDecks: Boolean,
+        deckIds: List<String>,
+        includeAllCards: Boolean,
+        cardIds: List<String>,
+        includeAllQuestions: Boolean,
+        questionIds: List<String>
+    ): List<QuestionContextRow>
+
+    /**
      * 复习页需要只加载当前卡片本轮到期的问题，
      * 这样才能满足“按卡片组织并按问题逐题推进”的交互约束。
      */
