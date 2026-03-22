@@ -21,6 +21,7 @@ import com.kariscode.yike.data.local.db.dao.SyncPeerDao
 import com.kariscode.yike.data.repository.OfflineCardRepository
 import com.kariscode.yike.data.repository.OfflineDeckRepository
 import com.kariscode.yike.data.repository.OfflineQuestionRepository
+import com.kariscode.yike.data.repository.OfflinePracticeRepository
 import com.kariscode.yike.data.repository.OfflineReviewRepository
 import com.kariscode.yike.data.repository.OfflineStudyInsightsRepository
 import com.kariscode.yike.data.reminder.NotificationHelper
@@ -40,6 +41,7 @@ import com.kariscode.yike.domain.repository.DeckRepository
 import com.kariscode.yike.domain.repository.LanSyncRepository
 import com.kariscode.yike.domain.repository.QuestionRepository
 import com.kariscode.yike.domain.repository.QuestionEditorDraftRepository
+import com.kariscode.yike.domain.repository.PracticeRepository
 import com.kariscode.yike.domain.repository.ReviewRepository
 import com.kariscode.yike.domain.repository.StudyInsightsRepository
 import com.kariscode.yike.domain.scheduler.ReviewSchedulerV1
@@ -271,6 +273,16 @@ class AppContainer(
             reviewScheduler = reviewScheduler,
             dispatchers = dispatchers,
             syncChangeRecorder = lanSyncChangeRecorder
+        )
+    }
+
+    /**
+     * 练习模式仓储只暴露读取能力，是为了把“不写入调度”的产品边界固化到依赖装配层。
+     */
+    val practiceRepository: PracticeRepository by lazy {
+        OfflinePracticeRepository(
+            questionDao = contentDataAccess.questionDao,
+            dispatchers = dispatchers
         )
     }
 

@@ -25,6 +25,8 @@ import com.kariscode.yike.feature.editor.QuestionEditorScreen
 import com.kariscode.yike.feature.home.HomeScreen
 import com.kariscode.yike.feature.analytics.AnalyticsScreen
 import com.kariscode.yike.feature.preview.TodayPreviewScreen
+import com.kariscode.yike.feature.practice.PracticeSessionScreen
+import com.kariscode.yike.feature.practice.PracticeSetupScreen
 import com.kariscode.yike.feature.recyclebin.RecycleBinScreen
 import com.kariscode.yike.feature.review.ReviewCardScreen
 import com.kariscode.yike.feature.review.ReviewQueueScreen
@@ -114,6 +116,26 @@ fun YikeNavGraph(
 
             composable(route = YikeDestination.REVIEW_QUEUE) {
                 ReviewQueueScreen(
+                    navigator = navigator
+                )
+            }
+
+            composable(
+                route = YikeDestination.PRACTICE_SETUP,
+                arguments = practiceSessionNavArguments()
+            ) { entry ->
+                PracticeSetupScreen(
+                    initialArgs = entry.toPracticeSessionArgs(),
+                    navigator = navigator
+                )
+            }
+
+            composable(
+                route = YikeDestination.PRACTICE_SESSION,
+                arguments = practiceSessionNavArguments()
+            ) { entry ->
+                PracticeSessionScreen(
+                    args = entry.toPracticeSessionArgs(),
                     navigator = navigator
                 )
             }
@@ -279,6 +301,32 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.primaryDestination
         fadeDurationMillis = 280
     )
 }
+
+/**
+ * 练习设置页与会话页共享同一组 query 参数声明，是为了让两段流程始终围绕同一份范围协议工作。
+ */
+private fun practiceSessionNavArguments() = listOf(
+    navArgument(NavArguments.DECK_IDS) {
+        type = NavType.StringType
+        nullable = true
+        defaultValue = null
+    },
+    navArgument(NavArguments.CARD_IDS) {
+        type = NavType.StringType
+        nullable = true
+        defaultValue = null
+    },
+    navArgument(NavArguments.QUESTION_IDS) {
+        type = NavType.StringType
+        nullable = true
+        defaultValue = null
+    },
+    navArgument(NavArguments.ORDER_MODE) {
+        type = NavType.StringType
+        nullable = true
+        defaultValue = null
+    }
+)
 
 /**
  * 退出动画与进入方向保持镜像，是为了让一级入口像桌面页一样形成连续的“推开/滑入”关系，

@@ -1,12 +1,16 @@
 package com.kariscode.yike.feature
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import com.kariscode.yike.domain.model.PracticeSessionArgs
 import com.kariscode.yike.domain.model.TodayReviewSummary
 import com.kariscode.yike.feature.backup.BackupRestoreContent
 import com.kariscode.yike.feature.backup.BackupRestoreUiState
 import com.kariscode.yike.feature.home.HomeContent
+import com.kariscode.yike.feature.home.HomeContentMode
 import com.kariscode.yike.feature.home.HomeUiState
 import com.kariscode.yike.feature.review.ReviewCardContent
 import com.kariscode.yike.feature.review.ReviewCardUiState
@@ -36,6 +40,8 @@ class FeatureContentTest {
         override fun openCardList(deckId: String) = Unit
         override fun openReviewQueue() = Unit
         override fun openReviewCard(cardId: String) = Unit
+        override fun openPracticeSetup(args: PracticeSessionArgs) = Unit
+        override fun openPracticeSession(args: PracticeSessionArgs) = Unit
         override fun openTodayPreview() = Unit
         override fun openAnalytics() = Unit
         override fun openQuestionSearch(deckId: String?, cardId: String?) = Unit
@@ -57,8 +63,9 @@ class FeatureContentTest {
                 HomeContent(
                     uiState = HomeUiState(
                         isLoading = true,
-                        summary = null,
+                        summary = TodayReviewSummary(dueCardCount = 0, dueQuestionCount = 0),
                         recentDecks = emptyList(),
+                        contentMode = HomeContentMode.CONTENT_EMPTY,
                         errorMessage = null
                     ),
                     onRetry = {},
@@ -83,6 +90,7 @@ class FeatureContentTest {
                         isLoading = false,
                         summary = TodayReviewSummary(dueCardCount = 0, dueQuestionCount = 0),
                         recentDecks = emptyList(),
+                        contentMode = HomeContentMode.CONTENT_EMPTY,
                         errorMessage = null
                     ),
                     onRetry = {},
@@ -91,8 +99,8 @@ class FeatureContentTest {
             }
         }
 
-        composeRule.onNodeWithText("今日暂无待复习").assertIsDisplayed()
-        composeRule.onNodeWithText("创建内容").assertIsDisplayed()
+        composeRule.onNodeWithText("先创建第一组学习内容").assertIsDisplayed()
+        composeRule.onAllNodesWithText("创建内容").assertCountEquals(2)
     }
 
     /**
@@ -105,8 +113,9 @@ class FeatureContentTest {
                 HomeContent(
                     uiState = HomeUiState(
                         isLoading = false,
-                        summary = null,
+                        summary = TodayReviewSummary(dueCardCount = 0, dueQuestionCount = 0),
                         recentDecks = emptyList(),
+                        contentMode = HomeContentMode.CONTENT_EMPTY,
                         errorMessage = "数据库读取失败"
                     ),
                     onRetry = {},
@@ -133,6 +142,7 @@ class FeatureContentTest {
                         isLoading = false,
                         summary = TodayReviewSummary(dueCardCount = 0, dueQuestionCount = 0),
                         recentDecks = emptyList(),
+                        contentMode = HomeContentMode.CONTENT_EMPTY,
                         errorMessage = null
                     ),
                     onRetry = {},
@@ -163,7 +173,10 @@ class FeatureContentTest {
                             questionId = "question_1",
                             prompt = "什么是忆刻？",
                             answerText = "一个离线复习应用",
-                            stageIndex = 0
+                            stageIndex = 0,
+                            overdueBadgeText = null,
+                            overdueHintText = null,
+                            needsReinforcement = false
                         ),
                         answerVisible = true,
                         isSubmitting = false,
