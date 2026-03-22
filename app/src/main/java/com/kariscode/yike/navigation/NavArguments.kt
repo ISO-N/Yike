@@ -1,6 +1,8 @@
 package com.kariscode.yike.navigation
 
 import androidx.navigation.NavBackStackEntry
+import com.kariscode.yike.domain.model.PracticeOrderMode
+import com.kariscode.yike.domain.model.PracticeSessionArgs
 
 /**
  * 路由参数名集中定义，是为了让声明与读取走同一份标识，避免字符串字面量在导航图里散落复制。
@@ -8,6 +10,10 @@ import androidx.navigation.NavBackStackEntry
 object NavArguments {
     const val DECK_ID = "deckId"
     const val CARD_ID = "cardId"
+    const val DECK_IDS = "deckIds"
+    const val CARD_IDS = "cardIds"
+    const val QUESTION_IDS = "questionIds"
+    const val ORDER_MODE = "orderMode"
 }
 
 /**
@@ -23,3 +29,24 @@ fun NavBackStackEntry.requireStringArg(name: String): String =
  */
 fun NavBackStackEntry.optionalStringArg(name: String): String? =
     arguments?.getString(name)
+
+/**
+ * 练习模式的多选参数需要从 query 字符串恢复集合，因此统一解析可以避免每个入口各自 split。
+ */
+fun NavBackStackEntry.optionalStringListArg(name: String): List<String> =
+    optionalStringArg(name)
+        ?.split(",")
+        ?.map(String::trim)
+        ?.filter(String::isNotBlank)
+        ?.distinct()
+        .orEmpty()
+
+/**
+ * 练习路由参数恢复到结构化对象后，设置页与会话页就能共享同一份选择协议。
+ */
+fun NavBackStackEntry.toPracticeSessionArgs(): PracticeSessionArgs = PracticeSessionArgs(
+    deckIds = optionalStringListArg(NavArguments.DECK_IDS),
+    cardIds = optionalStringListArg(NavArguments.CARD_IDS),
+    questionIds = optionalStringListArg(NavArguments.QUESTION_IDS),
+    orderMode = PracticeOrderMode.fromStorageValue(optionalStringArg(NavArguments.ORDER_MODE))
+).normalized()

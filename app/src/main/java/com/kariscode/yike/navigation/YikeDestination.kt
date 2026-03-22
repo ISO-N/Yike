@@ -1,6 +1,7 @@
 package com.kariscode.yike.navigation
 
 import androidx.core.net.toUri
+import com.kariscode.yike.domain.model.PracticeSessionArgs
 
 /**
  * 将路由字符串集中定义的原因是避免在各个页面散落硬编码，
@@ -19,6 +20,8 @@ object YikeDestination {
 
     const val REVIEW_QUEUE = "review_queue"
     const val REVIEW_CARD = "review_card/{cardId}"
+    const val PRACTICE_SETUP = "practice_setup?deckIds={deckIds}&cardIds={cardIds}&questionIds={questionIds}&orderMode={orderMode}"
+    const val PRACTICE_SESSION = "practice_session?deckIds={deckIds}&cardIds={cardIds}&questionIds={questionIds}&orderMode={orderMode}"
 
     const val CARD_LIST = "card_list/{deckId}"
     const val QUESTION_EDITOR = "question_editor/{cardId}?deckId={deckId}"
@@ -66,6 +69,22 @@ object YikeDestination {
     )
 
     /**
+     * 练习设置页使用统一参数模型建路由，是为了让首页、卡组和搜索入口都复用同一套范围协议。
+     */
+    fun practiceSetup(args: PracticeSessionArgs = PracticeSessionArgs()): String = buildPracticeRoute(
+        route = "practice_setup",
+        args = args
+    )
+
+    /**
+     * 练习会话路由沿用同一参数模型，是为了让设置页确认开始时不需要重新拼一套独立协议。
+     */
+    fun practiceSession(args: PracticeSessionArgs): String = buildPracticeRoute(
+        route = "practice_session",
+        args = args
+    )
+
+    /**
      * 路径参数占位统一经由模板替换，是为了让“路由声明”和“实际拼接”不会在修改时各自漂移。
      */
     private fun buildPathRoute(
@@ -90,4 +109,26 @@ object YikeDestination {
         }
         return "$route?${params.joinToString("&")}".toUri().toString()
     }
+
+    /**
+     * 多选范围统一编码为 query 参数，是为了让练习设置页和练习会话页都能只依赖导航参数恢复状态。
+     */
+    private fun buildPracticeRoute(
+        route: String,
+        args: PracticeSessionArgs
+    ): String {
+        val normalized = args.normalized()
+        return buildQueryRoute(
+            route,
+            NavArguments.DECK_IDS to normalized.deckIds.encodeIdList(),
+            NavArguments.CARD_IDS to normalized.cardIds.encodeIdList(),
+            NavArguments.QUESTION_IDS to normalized.questionIds.encodeIdList(),
+            NavArguments.ORDER_MODE to normalized.orderMode.storageValue
+        )
+    }
 }
+
+/**
+ * 练习范围统一压缩成逗号分隔字符串，是为了在保持参数可读性的同时复用当前 query 路由构造方式。
+ */
+private fun List<String>.encodeIdList(): String? = takeIf(List<String>::isNotEmpty)?.joinToString(",")

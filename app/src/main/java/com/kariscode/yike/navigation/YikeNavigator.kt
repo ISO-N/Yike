@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import com.kariscode.yike.domain.model.PracticeSessionArgs
 
 /**
  * 将页面跳转统一收敛为可注入的导航器，是为了避免各 Screen 通过大量回调参数拼接导航，
@@ -49,6 +50,16 @@ interface YikeNavigator {
      * 打开单卡复习页，是为了让“下一张卡”这类动作在页面层保持更清晰的意图表达。
      */
     fun openReviewCard(cardId: String)
+
+    /**
+     * 打开练习设置页并可选带入局部范围，是为了让首页、卡组和搜索入口共享同一条只读练习主路径。
+     */
+    fun openPracticeSetup(args: PracticeSessionArgs = PracticeSessionArgs())
+
+    /**
+     * 进入练习会话需要显式传入当前确定的范围与顺序，是为了让设置页和局部快捷入口共用会话协议。
+     */
+    fun openPracticeSession(args: PracticeSessionArgs)
 
     /**
      * 打开今日预览，是为了让首页、卡片列表与统计页共享同一个预览入口。
@@ -127,6 +138,14 @@ class NavControllerYikeNavigator(
 
     override fun openReviewCard(cardId: String) {
         navController.navigate(YikeDestination.reviewCard(cardId))
+    }
+
+    override fun openPracticeSetup(args: PracticeSessionArgs) {
+        navController.navigate(YikeDestination.practiceSetup(args))
+    }
+
+    override fun openPracticeSession(args: PracticeSessionArgs) {
+        navController.navigate(YikeDestination.practiceSession(args))
     }
 
     override fun openTodayPreview() {
