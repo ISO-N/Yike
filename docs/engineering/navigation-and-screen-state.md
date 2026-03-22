@@ -32,6 +32,8 @@ card_list/{deckId}
 question_editor/{cardId}?deckId={deckId}
 review_queue
 review_card/{cardId}
+practice_setup?deckIds={deckIds}&cardIds={cardIds}&questionIds={questionIds}&orderMode={orderMode}
+practice_session?deckIds={deckIds}&cardIds={cardIds}&questionIds={questionIds}&orderMode={orderMode}
 settings
 recycle_bin
 backup_restore
@@ -59,11 +61,15 @@ debug
   -> 开始复习
       -> review_queue
           -> review_card/{cardId}
+  -> 自由练习
+      -> practice_setup
+          -> practice_session
   -> 卡组列表
       -> deck_list
           -> card_list/{deckId}
               -> question_search?deckId={deckId}&cardId={cardId}
               -> question_editor/{cardId}
+              -> practice_setup?deckIds={deckIds}&cardIds={cardIds}
   -> 设置
       -> settings
           -> lan_sync
@@ -79,7 +85,7 @@ debug
 - 内容管理与复习流彼此独立。
 - 设置页只承载全局能力，不承载内容管理。
 - 已落地实现中，`home`、`deck_list`、`settings` 共享一级导航壳；
-  `card_list`、`question_editor`、`review_queue`、`review_card`、`backup_restore`、`today_preview`、`review_analytics`、`question_search` 保持流内导航，不展示底部导航。
+  `card_list`、`question_editor`、`review_queue`、`review_card`、`practice_setup`、`practice_session`、`backup_restore`、`today_preview`、`review_analytics`、`question_search` 保持流内导航，不展示底部导航。
 - 一级导航壳采用紧凑页头 + 悬浮底部胶囊导航，避免顶部说明和底部底板过度挤占内容首屏。
 - 一级导航切换统一使用 `launchSingleTop + restoreState + popUpTo(saveState)`，并补充桌面式左右滑动转场；共享底部导航壳层固定在外层，只让内容区发生位移。
 - 一级页内容需要为悬浮导航预留底部安全区，但不再依赖 `Scaffold.bottomBar` 预留固定布局区域。
@@ -125,6 +131,22 @@ debug
 
 - 无参数
 - 用途：查看连续学习、评分分布、遗忘率和平均响应时间
+
+### 5.7 `practice_setup?deckIds={deckIds}&cardIds={cardIds}&questionIds={questionIds}&orderMode={orderMode}`
+
+- 可选：`deckIds`
+- 可选：`cardIds`
+- 可选：`questionIds`
+- 可选：`orderMode`
+- 用途：承接练习范围选择、题目级手选与顺序模式设置
+
+### 5.8 `practice_session?deckIds={deckIds}&cardIds={cardIds}&questionIds={questionIds}&orderMode={orderMode}`
+
+- 可选：`deckIds`
+- 可选：`cardIds`
+- 可选：`questionIds`
+- 可选：`orderMode`
+- 用途：按当前选择范围进入只读练习会话
 
 ---
 
@@ -465,6 +487,92 @@ error: ReviewError?
 
 ## 14. 设置页 `SettingsScreen`
 
+---
+
+## 13.6 练习设置页 `PracticeSetupScreen`
+
+### 页面职责
+
+- 承接自由练习入口
+- 提供按卡组、卡片、题目三级缩圈能力
+- 负责顺序 / 随机模式设置
+- 在 0 题时给出可逆空状态
+
+### `PracticeSetupUiState` 建议
+
+```text
+isLoading: Boolean
+deckOptions: List<PracticeDeckOptionUiModel>
+cardOptions: List<PracticeCardOptionUiModel>
+questionOptions: List<PracticeQuestionOptionUiModel>
+selectedDeckIds: Set<String>
+selectedCardIds: Set<String>
+selectedQuestionIds: Set<String>?
+orderMode: PracticeOrderMode
+effectiveQuestionCount: Int
+errorMessage: String?
+```
+
+### 关键事件
+
+- `OnRetry`
+- `OnDeckToggle(deckId)`
+- `OnCardToggle(cardId)`
+- `OnQuestionToggle(questionId)`
+- `OnSelectAllQuestions`
+- `OnClearQuestionSelection`
+- `OnOrderModeChange(mode)`
+- `OnStartPractice`
+
+说明：
+
+- `selectedQuestionIds = null` 表示“当前范围全选”
+- 题目级手选只改变练习会话参数，不产生任何写库副作用
+
+---
+
+## 13.7 练习会话页 `PracticeSessionScreen`
+
+### 页面职责
+
+- 展示当前练习题目
+- 控制“显示答案”与上一题/下一题推进
+- 维护顺序模式或随机模式的固定题序
+- 在系统回收后恢复当前 seed 与 index
+
+### `PracticeSessionUiState` 建议
+
+```text
+isLoading: Boolean
+orderMode: PracticeOrderMode
+currentIndex: Int
+totalCount: Int
+currentQuestion: PracticeSessionQuestionUiModel?
+answerVisible: Boolean
+sessionSeed: Long?
+isEmpty: Boolean
+errorMessage: String?
+```
+
+### 关键事件
+
+- `OnRevealAnswerClick`
+- `OnPreviousQuestionClick`
+- `OnNextQuestionClick`
+- `OnFinishPracticeClick`
+- `OnRetry`
+
+### 固定边界
+
+- 不写 `ReviewRecord`
+- 不调用正式评分事务
+- 不更新 `Question` 调度字段
+- 结束练习后回到首页或来源页，而不是继续正式复习队列
+
+---
+
+## 14. 设置页 `SettingsScreen`
+
 ### 14.1 页面职责
 
 - 管理提醒设置
@@ -736,6 +844,12 @@ error: BackupRestoreError?
 - 用户确认退出后，返回 `home`
 - 若当前卡已完成，继续下一张时优先回到 `review_queue`
 
+### 19.2.1 练习流
+
+- `practice_setup` 返回时优先回到来源页，若无来源则回到 `home`
+- `practice_session` 返回时结束本次练习，并回到 `home`
+- 练习流不会跳转进 `review_queue` 或 `review_card`
+
 ### 19.3 设置流
 
 - `recycle_bin` 返回 `settings`
@@ -778,6 +892,12 @@ error: BackupRestoreError?
 
 - 当前题索引不依赖仅存在于内存的状态
 - 进入页面后根据“本卡剩余 due 问题”重新计算当前位置
+
+练习页建议：
+
+- `practice_setup` 只依赖导航参数恢复当前默认范围
+- `practice_session` 通过 `SavedStateHandle` 保持随机 seed、当前题索引与答案显隐状态
+- 随机模式重建后不得重新洗牌
 
 ---
 

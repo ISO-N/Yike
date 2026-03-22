@@ -16,6 +16,7 @@
 4. 备份恢复安全。
 5. 提醒逻辑基本可靠。
 6. 搜索、统计、编辑、回收站这些页面层状态编排可回归。
+7. 练习模式只读边界与会话恢复正确。
 
 不追求单一覆盖率百分比门禁，优先使用“能力 x 门禁”的场景治理方式。
 
@@ -41,6 +42,8 @@
 - `AnalyticsViewModel`
 - `RecycleBinViewModel`
 - `DeckListViewModel`
+- `PracticeSetupViewModel`
+- `PracticeSessionViewModel`
 
 ### 3.2 Robolectric 主机集成测试
 
@@ -99,6 +102,7 @@
 - 评分后写库事务
 - 备份恢复回滚
 - 页面层状态编排：编辑、搜索、统计、回收站
+- 练习模式只读查询、范围裁剪与随机顺序恢复
 - 提醒调度器
 
 以下能力允许以 `androidTest` 或手动验收承接：
@@ -126,10 +130,13 @@
 - `feature/editor/QuestionEditorViewModelTest.kt`
 - `data/editor/FileQuestionEditorDraftRepositoryTest.kt`
 - `feature/search/QuestionSearchViewModelTest.kt`
+- `feature/practice/PracticeSetupViewModelTest.kt`
+- `feature/practice/PracticeSessionViewModelTest.kt`
   - `feature/analytics/AnalyticsViewModelTest.kt`
   - `feature/recyclebin/RecycleBinViewModelTest.kt`
   - `feature/deck/DeckListViewModelTest.kt`
   - `data/repository/OfflineDeckRepositoryTest.kt`
+- `data/repository/OfflinePracticeRepositoryTest.kt`
 - `data/settings/DataStoreAppSettingsRepositoryTest.kt`
   - `data/sync/LanSyncConflictResolverTest.kt`
   - `data/sync/LanSyncChangeApplierTest.kt`
@@ -147,6 +154,12 @@
 - 手动“保存草稿”只写本机草稿，不写正式仓储
 - 返回前补存草稿再导航
 - 正式保存成功后删除本地草稿
+- 练习模式新增后，相关自动化至少覆盖：
+  - 练习查询忽略 `dueAt`，但排除归档内容与非 active 题目
+  - 练习会话不会写入 `ReviewRecord`，也不会修改任何 `Question` 调度字段
+  - 题目级手选最终会严格映射到 `questionIds`
+  - 随机模式在同一会话恢复后保持相同题序和当前索引
+  - 空答案展示为“无答案”，空范围展示可返回调整的空状态
 - androidTest
   - `androidTest/data/local/db/YikeDatabaseIntegrationTest.kt`
   - `androidTest/feature/FeatureContentTest.kt`
@@ -189,6 +202,7 @@
 - 单卡组多卡片多问题
 - 包含空答案问题的数据
 - 包含归档内容的数据
+- 包含局部题目集（仅部分 questionIds）的数据
 - 包含多条 `ReviewRecord` 的数据
 - 包含备份 / 恢复后的提醒设置数据
 
