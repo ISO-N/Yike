@@ -91,7 +91,8 @@ private fun PracticeSessionContent(
     val spacing = LocalYikeSpacing.current
     YikeScrollableColumn(
         modifier = modifier,
-        contentPadding = contentPadding
+        contentPadding = contentPadding,
+        verticalArrangement = Arrangement.spacedBy(spacing.xl)
     ) {
         when {
             uiState.isLoading -> {

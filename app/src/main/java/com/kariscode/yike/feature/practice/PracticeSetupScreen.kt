@@ -8,6 +8,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -81,10 +84,13 @@ private fun PracticeSetupContent(
     modifier: Modifier = Modifier
 ) {
     val spacing = LocalYikeSpacing.current
+    var deckSectionExpanded by rememberSaveable { mutableStateOf(false) }
+    var cardSectionExpanded by rememberSaveable { mutableStateOf(false) }
+    var questionSectionExpanded by rememberSaveable { mutableStateOf(false) }
     LazyColumn(
         modifier = modifier,
         contentPadding = contentPadding,
-        verticalArrangement = Arrangement.spacedBy(spacing.lg)
+        verticalArrangement = Arrangement.spacedBy(spacing.xl)
     ) {
         item {
             PracticeHeroSection(
@@ -151,30 +157,38 @@ private fun PracticeSetupContent(
                 item {
                     PracticeDeckSection(
                         deckOptions = uiState.deckOptions,
-                        onDeckToggle = onDeckToggle
+                        onDeckToggle = onDeckToggle,
+                        expanded = deckSectionExpanded,
+                        onExpandedChange = { deckSectionExpanded = it }
                     )
                 }
                 item {
                     PracticeCardSection(
                         cardOptions = uiState.cardOptions,
-                        onCardToggle = onCardToggle
+                        onCardToggle = onCardToggle,
+                        expanded = cardSectionExpanded,
+                        onExpandedChange = { cardSectionExpanded = it }
                     )
                 }
                 item {
                     PracticeQuestionSectionHeader(
                         uiState = uiState,
                         onSelectAllQuestions = onSelectAllQuestions,
-                        onClearQuestionSelection = onClearQuestionSelection
+                        onClearQuestionSelection = onClearQuestionSelection,
+                        expanded = questionSectionExpanded,
+                        onExpandedChange = { questionSectionExpanded = it }
                     )
                 }
-                items(
-                    items = uiState.questionOptions,
-                    key = { option -> option.questionId }
-                ) { option ->
-                    PracticeQuestionCard(
-                        option = option,
-                        onQuestionToggle = onQuestionToggle
-                    )
+                if (questionSectionExpanded) {
+                    items(
+                        items = uiState.questionOptions,
+                        key = { option -> option.questionId }
+                    ) { option ->
+                        PracticeQuestionCard(
+                            option = option,
+                            onQuestionToggle = onQuestionToggle
+                        )
+                    }
                 }
             }
         }
