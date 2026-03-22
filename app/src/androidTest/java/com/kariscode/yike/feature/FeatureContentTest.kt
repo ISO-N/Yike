@@ -1,7 +1,9 @@
 package com.kariscode.yike.feature
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import com.kariscode.yike.domain.model.PracticeSessionArgs
 import com.kariscode.yike.domain.model.TodayReviewSummary
@@ -98,7 +100,7 @@ class FeatureContentTest {
         }
 
         composeRule.onNodeWithText("先创建第一组学习内容").assertIsDisplayed()
-        composeRule.onNodeWithText("创建内容").assertIsDisplayed()
+        composeRule.onAllNodesWithText("创建内容").assertCountEquals(2)
     }
 
     /**
